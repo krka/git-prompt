@@ -166,7 +166,7 @@ static const char prompt_help[] =
 	"  ↕        - Too far diverged from main (>max-traversal commits, red)\n"
 	"\n"
 	"OTHER INDICATORS:\n"
-	"  🎒       - Stashed changes present (cyan)\n"
+	"  💾       - Stashed changes present (cyan)\n"
 	"\n"
 	"EXAMPLES:\n"
 	"  [main]                - On main, in sync with upstream, clean\n"
@@ -175,7 +175,7 @@ static const char prompt_help[] =
 	"  [feature] ↑5↓3        - On feature, 5 ahead/3 behind main, synced with upstream\n"
 	"  [feature] ↑10(↑2)     - Feature: 10 ahead of main, 2 unpushed to upstream\n"
 	"  [main] ⚡ [merge:conflict]  - Detached HEAD, merge with conflicts\n"
-	"  [feature] 🎒          - On feature, has stashed changes\n"
+	"  [feature] 💾          - On feature, has stashed changes\n"
 	"\n"
 	"PERFORMANCE:\n"
 	"  For large repositories (>5MB index), status checks are skipped for speed.\n"
@@ -1390,7 +1390,7 @@ static void get_misc_indicators(struct strbuf *indicators, int detached,
 
 	/* Check for stashed changes (emoji, color has no effect) */
 	if (refs_ref_exists(ctx->refs, "refs/stash")) {
-		strbuf_addstr(indicators, "🎒");
+		strbuf_addstr(indicators, "💾");
 	}
 }
 

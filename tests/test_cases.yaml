@@ -98,8 +98,8 @@ tests:
   - git commit -m "Initial"
   - echo "change" > file.txt
   - git stash
-  expected: '{GREEN}[master]{} 🎒'
-  expected_large: '{GRAY}[master]{} 🎒'
+  expected: '{GREEN}[master]{} 💾'
+  expected_large: '{GRAY}[master]{} 💾'
 - description: Clean state after stash drop
   name: Clean after stash
   group: stash

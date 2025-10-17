@@ -134,7 +134,7 @@ The tool provides **two levels of tracking** to help you understand your branch 
 - `⚡` - Detached HEAD
 - `[state]` - Git operation in progress (merge, rebase, cherry-pick, revert)
   - Red when conflicts present, cyan otherwise
-- `🎒` - Stashed changes present
+- `💾` - Stashed changes present
 
 ### Examples
 
@@ -148,7 +148,7 @@ The tool provides **two levels of tracking** to help you understand your branch 
 [feature] ↑5(↓1)        # Feature: 5 ahead of main, 1 commit behind upstream (need to pull)
 [main] ⚡               # Detached HEAD on main
 [main] [merge:conflict] # Merge in progress with conflicts (red)
-[feature] 🎒            # Feature branch with stashed changes
+[feature] 💾            # Feature branch with stashed changes
 ```
 
 ## Performance
