@@ -1,0 +1,23 @@
+# Test outputs
+tests/examples.html
+tests/examples-doc.html
+tests/examples-snippet.html
+tests/test-results.html
+tests/test-results.txt
+tests/documentation.html
+
+# Git prompt cache (if testing in this repo)
+.git/prompt-cache
+
+# Build artifacts
+target/
+
+# GitHub Pages worktree
+gh-pages/
+
+# Release directory (preserve README.md but ignore binary)
+release/*
+!release/README.md
+
+# Development notes (personal)
+docs/plan.md

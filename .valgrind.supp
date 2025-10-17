@@ -1,0 +1,15 @@
+# Valgrind suppressions for git-prompt
+#
+# This file suppresses known issues from the git submodule libraries
+# that we don't control. Add suppressions here for:
+# - Known issues in libgit.a
+# - Platform-specific libc issues
+# - Other third-party library issues
+
+# Example suppression (currently empty - add as needed)
+# {
+#    git_config_leak
+#    Memcheck:Leak
+#    ...
+#    fun:git_config_*
+# }

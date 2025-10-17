@@ -1,0 +1,661 @@
+name: Git Prompt Test Cases
+tests:
+- description: No git repository present
+  name: No git repository
+  group: basic
+  steps: []
+  expected: ''
+- description: Fresh git repository
+  name: Fresh git init
+  group: basic
+  steps:
+  - git init
+  - git config user.name "Test User"
+  - git config user.email "test@example.com"
+  expected: ''
+- description: Untracked file in repository
+  name: Untracked file added
+  group: basic
+  steps:
+  - touch file1.txt
+  expected: ''
+- description: File staged for commit
+  name: File staged
+  group: basic
+  steps:
+  - git add file1.txt
+  expected: ''
+- description: Initial commit
+  name: First commit made
+  group: basic
+  steps:
+  - git commit -m "Initial commit"
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file not staged
+  name: File modified (unstaged)
+  group: working-tree
+  steps:
+  - echo "content" > file1.txt
+  expected: '{RED}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file staged for commit
+  name: File modified (staged)
+  group: working-tree
+  steps:
+  - git add file1.txt
+  expected: '{YELLOW}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Second commit on branch
+  name: Second commit
+  group: basic
+  steps:
+  - git commit -m "Update file1"
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Creating feature branch
+  name: Create feature branch
+  group: branches
+  steps:
+  - git checkout -b feature
+  expected: '{GREEN}[feature]{}'
+  expected_large: '{GRAY}[feature]{}'
+- description: Commit on feature branch
+  name: Commit on feature branch
+  group: branches
+  steps:
+  - touch feature.txt
+  - git add feature.txt
+  - git commit -m "Add feature"
+  expected: '{GREEN}[feature]{}'
+  expected_large: '{GRAY}[feature]{}'
+- description: Detached HEAD state
+  name: Detached HEAD
+  group: detached
+  example: true
+  steps:
+  - git checkout HEAD~1
+  expected: '{GREEN}[842fbac]{} ⚡'
+  expected_large: '{GRAY}[842fbac]{} ⚡'
+- description: Returning to feature branch
+  name: Back to feature branch
+  group: branches
+  steps:
+  - git checkout feature
+  expected: '{GREEN}[feature]{}'
+  expected_large: '{GRAY}[feature]{}'
+- description: Creating stash
+  name: Create stash
+  group: stash
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test User"
+  - git config user.email "test@example.com"
+  - touch file.txt
+  - git add file.txt
+  - git commit -m "Initial"
+  - echo "change" > file.txt
+  - git stash
+  expected: '{GREEN}[master]{} 🎒'
+  expected_large: '{GRAY}[master]{} 🎒'
+- description: Clean state after stash drop
+  name: Clean after stash
+  group: stash
+  steps:
+  - git stash drop
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Clean working tree
+  name: Clean working tree
+  group: working-tree
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file1.txt
+  - git add file1.txt
+  - git commit -m "Initial"
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file unstaged
+  name: Modified file unstaged
+  group: working-tree
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file1.txt
+  - git add file1.txt
+  - git commit -m "Initial"
+  - echo "modified" > file1.txt
+  expected: '{RED}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file staged
+  name: Modified file staged
+  group: working-tree
+  example: true
+  steps:
+  - git add file1.txt
+  expected: '{YELLOW}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Only untracked files present
+  name: Untracked files only
+  group: working-tree
+  example: true
+  steps:
+  - git reset --hard
+  - touch untracked.txt
+  expected: '{CYAN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: New file staged
+  name: New file staged
+  group: working-tree
+  steps:
+  - git add untracked.txt
+  expected: '{YELLOW}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Large repository detection
+  name: Large repository (gray)
+  group: working-tree
+  reset: true
+  large_repo_size: 100
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file1.txt
+  - git add file1.txt
+  - git commit -m "Initial"
+  expected: '{GRAY}[master]{}'
+- description: Merge in progress without conflicts
+  name: Merge in progress (no conflicts)
+  group: in-progress
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "main" > file.txt
+  - git add file.txt
+  - git commit -m "Main commit"
+  - git checkout -b feature
+  - echo "feature" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature commit"
+  - git checkout master
+  - echo "master2" > master.txt
+  - git add master.txt
+  - git commit -m "Master commit 2"
+  - git merge feature --no-commit
+  expected: '{YELLOW}[master]{} {CYAN}[merge:commit]{}'
+- description: Merge with conflicts
+  name: Merge with conflicts
+  group: in-progress
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > conflict.txt
+  - git add conflict.txt
+  - git commit -m "Base"
+  - git checkout -b feature
+  - echo "feature change" > conflict.txt
+  - git add conflict.txt
+  - git commit -m "Feature change"
+  - git checkout master
+  - echo "master change" > conflict.txt
+  - git add conflict.txt
+  - git commit -m "Master change"
+  - git merge feature || true
+  expected: '{RED}[master]{} {RED}[merge:conflict]{}'
+- description: Rebase stopped for editing
+  name: Rebase stopped for edit
+  group: in-progress
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - echo "change1" > file.txt
+  - git add file.txt
+  - git commit -m "Change 1"
+  - GIT_SEQUENCE_EDITOR="sed -i 's/^pick/edit/'" git rebase -i HEAD~1
+  expected: '{YELLOW}[f3acd42]{} ⚡{CYAN}[rebase:continue]{}'
+- description: Cherry-pick with conflict
+  name: Cherry-pick with conflict
+  group: in-progress
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - git checkout -b feature
+  - echo "feature change" > file.txt
+  - git add file.txt
+  - git commit -m "Feature change"
+  - git checkout master
+  - echo "master change" > file.txt
+  - git add file.txt
+  - git commit -m "Master change"
+  - git cherry-pick feature || true
+  expected: '{RED}[master]{} {RED}[cherrypick:conflict]{}'
+- description: Rebase with conflicts
+  name: Rebase with conflicts
+  group: in-progress
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - git checkout -b feature
+  - echo "feature line 1" >> file.txt
+  - git add file.txt
+  - git commit -m "Feature commit 1"
+  - echo "feature line 2" >> file.txt
+  - git add file.txt
+  - git commit -m "Feature commit 2"
+  - git checkout master
+  - echo "master line 1" >> file.txt
+  - git add file.txt
+  - git commit -m "Master commit"
+  - git checkout feature
+  - git rebase master || true
+  expected: '{RED}[545c30c]{} ⚡{RED}[rebase:conflict]{}'
+- description: Git revert with conflicts
+  name: Revert with conflicts
+  group: in-progress
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - echo "change to revert" > file.txt
+  - git add file.txt
+  - git commit -m "Change to revert"
+  - echo "conflicting change" > file.txt
+  - git add file.txt
+  - git commit -m "Conflicting change"
+  - git revert HEAD~1 || true
+  expected: '{RED}[master]{} {RED}[revert:conflict]{}'
+- description: Git bisect in progress
+  name: Bisect in progress (good/bad)
+  group: bisect
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Commit 1"
+  - echo "v2" > file.txt
+  - git add file.txt
+  - git commit -m "Commit 2"
+  - echo "v3" > file.txt
+  - git add file.txt
+  - git commit -m "Commit 3"
+  - echo "v4" > file.txt
+  - git add file.txt
+  - git commit -m "Commit 4"
+  - git bisect start
+  - git bisect bad
+  - git bisect good HEAD~3
+  expected: '{GREEN}[5bc0037]{} ⚡'
+  expected_large: '{GRAY}[5bc0037]{} ⚡'
+- description: Detached HEAD on tag
+  name: Detached HEAD on tag
+  group: detached
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Version 1"
+  - git tag v1.0
+  - git checkout v1.0
+  expected: '{GREEN}[v1.0]{} ⚡'
+  expected_large: '{GRAY}[23e6adf]{} ⚡'
+- description: Branch in sync with upstream
+  name: In sync with upstream
+  group: upstream
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file.txt
+  - git add file.txt
+  - git commit -m "Initial"
+  - git remote add origin https://example.com/repo.git
+  - git config branch.master.remote origin
+  - git config branch.master.merge refs/heads/master
+  - git update-ref refs/remotes/origin/master HEAD
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Branch ahead of upstream
+  name: Ahead of upstream (need to push)
+  group: upstream
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Version 1"
+  - git remote add origin https://example.com/repo.git
+  - git config branch.master.remote origin
+  - git config branch.master.merge refs/heads/master
+  - git update-ref refs/remotes/origin/master HEAD
+  - echo "v2" > file.txt
+  - git add file.txt
+  - git commit -m "Version 2"
+  expected: '{GREEN}[master]{} {BLUE}(↑1){}'
+  expected_large: '{GRAY}[master]{} {BLUE}(↑1){}'
+- description: Branch behind upstream
+  name: Behind upstream (need to pull)
+  group: upstream
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Version 1"
+  - echo "v2" > file.txt
+  - git add file.txt
+  - git commit -m "Version 2"
+  - git remote add origin https://example.com/repo.git
+  - git config branch.master.remote origin
+  - git config branch.master.merge refs/heads/master
+  - git update-ref refs/remotes/origin/master HEAD
+  - git reset --hard HEAD~1
+  expected: '{GREEN}[master]{} {YELLOW}(↓1){}'
+  expected_large: '{GRAY}[master]{} {YELLOW}(↓1){}'
+- description: Master tracking origin/master
+  name: Master tracking origin/master (no duplicate indicators)
+  group: upstream
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Version 1"
+  - echo "v2" > file.txt
+  - git add file.txt
+  - git commit -m "Version 2"
+  - git remote add origin https://example.com/repo.git
+  - git config branch.master.remote origin
+  - git config branch.master.merge refs/heads/master
+  - git update-ref refs/remotes/origin/master HEAD
+  - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+  - git reset --hard HEAD~1
+  expected: '{GREEN}[master]{} {YELLOW}↓1{}'
+  expected_large: '{GRAY}[master]{} {YELLOW}↓1{}'
+- description: Branch diverged from upstream
+  name: Diverged from upstream
+  group: upstream
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base commit"
+  - git remote add origin https://example.com/repo.git
+  - git config branch.master.remote origin
+  - git config branch.master.merge refs/heads/master
+  - git update-ref refs/remotes/origin/master HEAD
+  - git checkout -b temp
+  - echo "remote change" > file.txt
+  - git add file.txt
+  - git commit -m "Remote change"
+  - git update-ref refs/remotes/origin/master HEAD
+  - git checkout master
+  - echo "local change" > file2.txt
+  - git add file2.txt
+  - git commit -m "Local change"
+  expected: '{GREEN}[master]{} {RED}(↑1↓1){}'
+  expected_large: '{GRAY}[master]{} {RED}(↑1↓1){}'
+- description: Feature branch ahead of origin/main
+  name: Feature branch ahead of origin/main
+  group: upstream
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "main" > file.txt
+  - git add file.txt
+  - git commit -m "Main commit"
+  - git remote add origin https://example.com/repo.git
+  - git update-ref refs/remotes/origin/main HEAD
+  - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  - git checkout -b feature
+  - echo "feature1" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature commit 1"
+  - echo "feature2" > feature2.txt
+  - git add feature2.txt
+  - git commit -m "Feature commit 2"
+  expected: '{GREEN}[feature]{} {BLUE}↑2{}'
+  expected_large: '{GRAY}[feature]{} {BLUE}↑2{}'
+- description: Feature branch behind origin/main
+  name: Feature branch behind origin/main
+  group: upstream
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Version 1"
+  - git checkout -b feature
+  - echo "feature" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature commit"
+  - git checkout -b main
+  - echo "v2" > file.txt
+  - git add file.txt
+  - git commit -m "Version 2"
+  - echo "v3" > file.txt
+  - git add file.txt
+  - git commit -m "Version 3"
+  - git remote add origin https://example.com/repo.git
+  - git update-ref refs/remotes/origin/main HEAD
+  - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  - git checkout feature
+  expected: '{GREEN}[feature]{} {YELLOW}↓2{}'
+  expected_large: '{GRAY}[feature]{} {YELLOW}↓2{}'
+- description: Branch too far diverged from upstream
+  name: Too far diverged from upstream
+  group: upstream
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - git remote add origin https://example.com/repo.git
+  - git config branch.master.remote origin
+  - git config branch.master.merge refs/heads/master
+  - git update-ref refs/remotes/origin/master HEAD
+  - git checkout -b temp
+  - command: echo x >> file.txt && git add file.txt && git commit -m 'Remote commit'
+    repeat: 15
+  - git update-ref refs/remotes/origin/master HEAD
+  - git checkout master
+  - command: echo y >> file2.txt && git add file2.txt && git commit -m 'Local commit'
+    repeat: 15
+  expected: '{GREEN}[master]{} {RED}(↕){}'
+  expected_large: '{GRAY}[master]{} {RED}(↕){}'
+- description: Branch far behind origin/main
+  name: Far behind origin/main (>10 commits)
+  group: upstream
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - git checkout -b feature
+  - echo "feature" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature"
+  - git checkout -b main
+  - command: echo x >> file.txt && git add file.txt && git commit -m 'Main commit'
+    repeat: 15
+  - git remote add origin https://example.com/repo.git
+  - git update-ref refs/remotes/origin/main HEAD
+  - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  - git checkout feature
+  expected: '{GREEN}[feature]{} {RED}↕{}'
+  expected_large: '{GRAY}[feature]{} {RED}↕{}'
+- description: Feature branch ahead and diverged
+  name: 'Feature branch: ahead of origin/feature, diverged from origin/master'
+  group: upstream
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - git checkout -b main
+  - echo "A" > file.txt
+  - git add file.txt
+  - git commit -m "Commit A"
+  - echo "B" >> file.txt
+  - git add file.txt
+  - git commit -m "Commit B"
+  - echo "C" >> file.txt
+  - git add file.txt
+  - git commit -m "Commit C"
+  - echo "D" >> file.txt
+  - git add file.txt
+  - git commit -m "Commit D"
+  - echo "E" >> file.txt
+  - git add file.txt
+  - git commit -m "Commit E"
+  - echo "F" >> file.txt
+  - git add file.txt
+  - git commit -m "Commit F"
+  - git remote add origin https://example.com/repo.git
+  - git update-ref refs/remotes/origin/main HEAD
+  - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  - git checkout HEAD~3
+  - git checkout -b feature
+  - echo "X" >> feature.txt
+  - git add feature.txt
+  - git commit -m "Commit X"
+  - echo "Y" >> feature.txt
+  - git add feature.txt
+  - git commit -m "Commit Y"
+  - echo "W" >> feature.txt
+  - git add feature.txt
+  - git commit -m "Commit W"
+  - git update-ref refs/remotes/origin/feature HEAD
+  - git config branch.feature.remote origin
+  - git config branch.feature.merge refs/heads/feature
+  - echo "Z" >> feature.txt
+  - git add feature.txt
+  - git commit -m "Commit Z"
+  expected: '{GREEN}[feature]{} {RED}↑4↓3{}{BLUE}(↑1){}'
+  expected_large: '{GRAY}[feature]{} {RED}↑4↓3{}{BLUE}(↑1){}'
+- description: Repository with worktree
+  name: Worktree exists (main repo clean)
+  group: worktree
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "main" > file.txt
+  - git add file.txt
+  - git commit -m "Main commit"
+  - git checkout -b feature
+  - echo "feature" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature commit"
+  - git checkout master
+  - git worktree add ../worktree-dir feature
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Git am (apply mailbox) clean apply
+  name: Git am clean apply
+  group: am
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - git checkout -b patch-branch
+  - echo "patch content" >> file.txt
+  - git add file.txt
+  - git commit -m "Patch commit"
+  - git format-patch -1 HEAD --stdout > patch.diff
+  - git checkout master
+  - git am patch.diff
+  - rm patch.diff
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Git am with conflict (uses rebase internally)
+  name: Git am with conflicts
+  group: am
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base"
+  - git checkout -b patch-branch
+  - echo "patch content" > file.txt
+  - git add file.txt
+  - git commit -m "Patch commit"
+  - git format-patch -1 HEAD --stdout > patch.diff
+  - git checkout master
+  - echo "conflicting content" > file.txt
+  - git add file.txt
+  - git commit -m "Conflicting commit"
+  - git am patch.diff || true
+  expected: '{YELLOW}[master]{} {CYAN}[rebase:continue]{}'

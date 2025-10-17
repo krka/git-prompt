@@ -1,0 +1,95 @@
+# Git source patches for git-prompt optimization
+# This file defines patches to comment out unused code paths before compilation
+# to enable LTO dead code elimination.
+#
+# Format:
+#   - file: path relative to submodules/git/
+#     description: what this patch does and why
+#     patches:
+#       - pattern: exact text to search for (regex not supported for safety)
+#         action: comment  # or 'remove' to delete the line entirely
+#         reason: why this specific line is being patched
+
+patches:
+  # 1. Remove reftable backend (37 unreachable functions, ~150KB)
+  - file: refs.c
+    description: Remove reftable backend - we only use files backend
+    patches:
+      - pattern: "[REF_STORAGE_FORMAT_REFTABLE] = &refs_be_reftable,"
+        action: comment
+        reason: Reftable backend has 37 unreachable functions totaling ~150KB
+
+  # 2. Remove fsck operations (18 unreachable functions, ~50KB)
+  - file: builtin.h
+    description: Remove fsck command - never used in git-prompt
+    patches:
+      - pattern: "int cmd_fsck(int argc, const char **argv, const char *prefix, struct repository *repo);"
+        action: comment
+        reason: Fsck has large fanout (18 functions, ~50KB) and never runs in prompt
+
+  - file: git.c
+    description: Disable fsck command registration
+    patches:
+      - pattern: "{ \"fsck\", cmd_fsck, RUN_SETUP },"
+        action: comment
+        reason: Prevent fsck from being registered as a command
+
+  # 3. Remove special date parsing keywords (8 functions, ~2KB)
+  - file: date.c
+    description: Remove special date keywords - git-prompt only needs standard dates
+    patches:
+      - pattern: '{ "yesterday", date_yesterday },'
+        action: comment
+        reason: Never parse 'yesterday' in git-prompt
+
+      - pattern: '{ "noon", date_noon },'
+        action: comment
+        reason: Never parse 'noon' in git-prompt
+
+      - pattern: '{ "midnight", date_midnight },'
+        action: comment
+        reason: Never parse 'midnight' in git-prompt
+
+      - pattern: '{ "tea", date_tea },'
+        action: comment
+        reason: Never parse 'tea' (5pm) in git-prompt
+
+      - pattern: '{ "PM", date_pm },'
+        action: comment
+        reason: Never parse 'PM' in git-prompt
+
+      - pattern: '{ "AM", date_am },'
+        action: comment
+        reason: Never parse 'AM' in git-prompt
+
+      - pattern: '{ "never", date_never },'
+        action: comment
+        reason: Never parse 'never' in git-prompt
+
+      - pattern: '{ "now", date_now },'
+        action: comment
+        reason: Never parse 'now' in git-prompt
+
+  # 4. Remove debug reference backend wrapper (58 functions, ~12KB)
+  - file: refs.c
+    description: Remove debug reference backend - git-prompt never needs ref tracing
+    patches:
+      - pattern: "r->refs_private = maybe_debug_wrap_ref_store(r->gitdir, r->refs_private);"
+        action: comment
+        reason: Debug wrapping has 58 unreachable functions totaling ~12KB, never used in prompt
+
+  # 5. Remove trace2 targets (81 functions, ~40KB)
+  - file: trace2.c
+    description: Remove trace2 instrumentation targets - git-prompt never outputs telemetry
+    patches:
+      - pattern: "&tr2_tgt_normal,"
+        action: comment
+        reason: Normal trace2 target has 27 fn_* functions, never used in prompt
+
+      - pattern: "&tr2_tgt_perf,"
+        action: comment
+        reason: Performance trace2 target has 27 fn_* functions, never used in prompt
+
+      - pattern: "&tr2_tgt_event,"
+        action: comment
+        reason: Event trace2 target has 27 fn_* functions, never used in prompt
