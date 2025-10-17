@@ -6,6 +6,15 @@
     <title>git-prompt - Fast Git Status for Your Shell Prompt</title>
     <link rel="stylesheet" href="test-styles.css">
     <style>
+        body {
+            background-color: #000000;
+        }
+        .container {
+            max-width: 50em;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1e1e1e;
+        }
         .hero {
             background: linear-gradient(135deg, #252526 0%, #1e1e1e 100%);
             border: 1px solid #3e3e42;
@@ -104,6 +113,7 @@
     </style>
 </head>
 <body>
+    <div class="container">
     <div class="hero">
         <h1>git-prompt</h1>
         <p>Fast, colorful git repository status for your shell prompt</p>
@@ -311,6 +321,7 @@ PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
 
     <div class="footer">
         Generated documentation for git-prompt
+    </div>
     </div>
 </body>
 </html>
