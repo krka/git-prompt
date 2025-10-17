@@ -110,6 +110,47 @@
             font-size: 0.85em;
             color: #858585;
         }
+        /* Tab styles */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #3e3e42;
+            margin-bottom: 20px;
+            gap: 5px;
+        }
+        .tab-button {
+            background-color: #1d1f21;
+            border: 1px solid #3e3e42;
+            border-bottom: none;
+            color: #cccccc;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .tab-button:hover {
+            background-color: #2d2d30;
+        }
+        .tab-button.active {
+            background-color: #252526;
+            color: #4ec9b0;
+            border-bottom: 2px solid #4ec9b0;
+            margin-bottom: -2px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .color-list {
+            list-style: none;
+            padding: 0;
+            line-height: 1.8;
+        }
+        .color-list li {
+            padding: 4px 0;
+        }
     </style>
 </head>
 <body>
@@ -135,73 +176,81 @@
     <div class="section">
         <h2>Installation</h2>
 
-        <h3>Quick Install (from release binaries)</h3>
-        <div class="install-box">
-            <code>
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab(event, 'binary')">Download Binary</button>
+            <button class="tab-button" onclick="switchTab(event, 'source')">Build from Source</button>
+            <button class="tab-button" onclick="switchTab(event, 'bash')">Bash</button>
+            <button class="tab-button" onclick="switchTab(event, 'zsh')">Zsh</button>
+            <button class="tab-button" onclick="switchTab(event, 'fish')">Fish</button>
+        </div>
+
+        <div id="binary" class="tab-content active">
+            <div class="install-box">
+                <code>
 # Download the latest release<br>
 curl -L -o git-prompt https://github.com/krka/git-prompt/releases/latest/download/git-prompt<br>
 chmod +x git-prompt<br>
 sudo mv git-prompt /usr/local/bin/
-            </code>
+                </code>
+            </div>
         </div>
 
-        <h3>Build from Source</h3>
-        <div class="install-box">
-            <code>
-# Clone the repository<br>
+        <div id="source" class="tab-content">
+            <div class="install-box">
+                <code>
 git clone https://github.com/krka/git-prompt.git<br>
 cd git-prompt<br>
-<br>
-# Build (git submodule will be initialized automatically)<br>
 make<br>
-<br>
-# Install (optional)<br>
 sudo make install
-            </code>
+                </code>
+            </div>
         </div>
 
-        <h3>Shell Integration</h3>
-        <p>Add to your <code>~/.bashrc</code> or <code>~/.bash_profile</code>:</p>
-        <div class="install-box">
-            <code>
-# Simple version<br>
-PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git-prompt) \\$ '<br>
-<br>
-# Or use the function wrapper for more control<br>
-git_prompt() {<br>
+        <div id="bash" class="tab-content">
+            <p>Add to your <code>~/.bashrc</code> or <code>~/.bash_profile</code>:</p>
+            <div class="install-box">
+                <code>
+PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git-prompt) \\$ '
+                </code>
+            </div>
+        </div>
+
+        <div id="zsh" class="tab-content">
+            <p>Add to your <code>~/.zshrc</code>:</p>
+            <div class="install-box">
+                <code>
+setopt PROMPT_SUBST<br>
+PROMPT='%F{cyan}%~%f $(git-prompt)%% '
+                </code>
+            </div>
+        </div>
+
+        <div id="fish" class="tab-content">
+            <p>Add to your <code>~/.config/fish/config.fish</code>:</p>
+            <div class="install-box">
+                <code>
+function fish_prompt<br>
+&nbsp;&nbsp;set_color cyan<br>
+&nbsp;&nbsp;echo -n (prompt_pwd)<br>
+&nbsp;&nbsp;set_color normal<br>
+&nbsp;&nbsp;echo -n ' '<br>
 &nbsp;&nbsp;git-prompt<br>
-}<br>
-PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
-            </code>
+end
+                </code>
+            </div>
         </div>
     </div>
 
     <div class="section">
         <h2>Branch Colors</h2>
         <p>The branch name color indicates your working tree status:</p>
-
-        <div class="color-legend">
-            <div class="color-item">
-                <h4><span class="ansi2">GREEN</span> - Clean working tree</h4>
-                <p>No uncommitted changes, everything is clean</p>
-            </div>
-            <div class="color-item">
-                <h4><span class="ansi3">YELLOW</span> - Staged changes</h4>
-                <p>Changes are staged and ready to commit</p>
-            </div>
-            <div class="color-item">
-                <h4><span class="ansi1">RED</span> - Unstaged changes or conflicts</h4>
-                <p>Modified files that need to be staged, or merge conflicts</p>
-            </div>
-            <div class="color-item">
-                <h4><span class="ansi6">CYAN</span> - Untracked files only</h4>
-                <p>New files that haven't been added to git yet</p>
-            </div>
-            <div class="color-item">
-                <h4><span class="ansi7">GRAY</span> - Large repository mode</h4>
-                <p>Status checks skipped for performance (repo exceeds size threshold)</p>
-            </div>
-        </div>
+        <ul class="color-list">
+            <li><span class="ansi2">GREEN</span> - Clean working tree</li>
+            <li><span class="ansi3">YELLOW</span> - Staged changes ready to commit</li>
+            <li><span class="ansi1">RED</span> - Unstaged changes or conflicts</li>
+            <li><span class="ansi6">CYAN</span> - Untracked files only</li>
+            <li><span class="ansi7">GRAY</span> - Large repository (status checks skipped)</li>
+        </ul>
     </div>
 
     <div class="section">
@@ -389,5 +438,25 @@ PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
         Generated documentation for git-prompt
     </div>
     </div>
+
+    <script>
+        function switchTab(event, tabId) {
+            // Hide all tab content
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove('active');
+            }
+
+            // Remove active class from all buttons
+            const tabButtons = document.getElementsByClassName('tab-button');
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove('active');
+            }
+
+            // Show selected tab and mark button as active
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+    </script>
 </body>
 </html>
