@@ -1138,6 +1138,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 
 	const char *main_branch = NULL;
 	char *main_branch_allocated = NULL; /* Track if main_branch was allocated */
+	int main_from_symref = 0; /* 1 if main_branch from origin/HEAD symref, 0 if from fallback */
 
 	/* Determine the default remote name (e.g., "origin", "upstream", etc.) */
 	const char *remote_name = NULL;
@@ -1180,13 +1181,47 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 		if (main_branch) {
 			main_branch_allocated = strdup(main_branch);
 			main_branch = main_branch_allocated;
+			main_from_symref = 1; /* Came from origin/HEAD symref */
 		}
 	} else {
-		/* No <remote>/HEAD configured - skip divergence calculation */
+		/* No <remote>/HEAD configured - try common fallbacks (main, master) */
 		if (debug_mode) {
-			fprintf(stderr, "[DEBUG] No refs/remotes/%s/HEAD - skipping divergence\n",
+			fprintf(stderr, "[DEBUG] No refs/remotes/%s/HEAD - trying fallbacks\n",
 				remote_name);
 		}
+
+		/* Try <remote>/main first */
+		struct strbuf fallback = STRBUF_INIT;
+		strbuf_addf(&fallback, "%s/main", remote_name);
+		struct strbuf fallback_ref = STRBUF_INIT;
+		strbuf_addf(&fallback_ref, "refs/remotes/%s", fallback.buf);
+
+		if (refs_ref_exists(ctx->refs, fallback_ref.buf)) {
+			main_branch_allocated = strbuf_detach(&fallback, NULL);
+			main_branch = main_branch_allocated;
+			if (debug_mode) {
+				fprintf(stderr, "[DEBUG] Using fallback: %s\n", main_branch);
+			}
+		} else {
+			/* Try <remote>/master */
+			strbuf_reset(&fallback);
+			strbuf_addf(&fallback, "%s/master", remote_name);
+			strbuf_reset(&fallback_ref);
+			strbuf_addf(&fallback_ref, "refs/remotes/%s", fallback.buf);
+
+			if (refs_ref_exists(ctx->refs, fallback_ref.buf)) {
+				main_branch_allocated = strbuf_detach(&fallback, NULL);
+				main_branch = main_branch_allocated;
+				if (debug_mode) {
+					fprintf(stderr, "[DEBUG] Using fallback: %s\n", main_branch);
+				}
+			} else if (debug_mode) {
+				fprintf(stderr, "[DEBUG] No fallback refs found - skipping divergence\n");
+			}
+		}
+
+		strbuf_release(&fallback);
+		strbuf_release(&fallback_ref);
 	}
 
 	if (debug_mode) {
@@ -1313,27 +1348,67 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	 * 2. Relationship to upstream tracking branch
 	 */
 
-	/* Show origin/master divergence (if we're on a feature branch) */
-	/* When upstream == main_branch, show this indicator instead of upstream tracking */
-	if (main_branch) {
+	/* Show main divergence when main_branch exists */
+	/* Skip if we already showed it as upstream indicator AND would be duplicate */
+	if (main_branch && (!has_upstream || !upstream_is_main)) {
 		if (data.main_ahead >= 0 && data.main_behind >= 0) {
 			/* Both values known - found merge-base, can show accurate divergence */
 			if (data.main_ahead > 0 && data.main_behind > 0) {
-				/* Diverged: both ahead and behind */
+				/* Diverged: both ahead and behind - never use parentheses */
 				strbuf_color_addf(indicators, COLOR_DIVERGED, "↑%d↓%d",
 						  data.main_ahead, data.main_behind);
 			} else if (data.main_ahead > 0) {
-				/* Ahead of main */
+				/* Ahead of main - never use parentheses */
 				strbuf_color_addf(indicators, COLOR_AHEAD, "↑%d", data.main_ahead);
 			} else if (data.main_behind > 0) {
-				/* Behind main */
-				strbuf_color_addf(indicators, COLOR_BEHIND, "↓%d",
-						  data.main_behind);
+				/* Behind main - never use parentheses */
+				strbuf_color_addf(indicators, COLOR_BEHIND, "↓%d", data.main_behind);
 			}
 			/* If both are 0, we're in sync - don't show anything */
 		} else {
 			/* Both searches exhausted - too far apart */
 			strbuf_color_addf(indicators, COLOR_DIVERGED, "↕");
+		}
+	}
+
+	/* Show upstream == main divergence with appropriate formatting */
+	if (has_upstream && upstream_is_main) {
+		/*
+		 * Use parentheses if main came from fallback (not from origin/HEAD symref).
+		 * When origin/HEAD symref exists and points to same as upstream, treat as
+		 * canonical main branch (no parentheses). Otherwise use parentheses to
+		 * indicate upstream tracking relationship.
+		 */
+		int use_parens = !main_from_symref;
+
+		if (data.main_ahead >= 0 && data.main_behind >= 0) {
+			if (data.main_ahead > 0 && data.main_behind > 0) {
+				if (use_parens) {
+					strbuf_color_addf(indicators, COLOR_DIVERGED, "(↑%d↓%d)",
+							  data.main_ahead, data.main_behind);
+				} else {
+					strbuf_color_addf(indicators, COLOR_DIVERGED, "↑%d↓%d",
+							  data.main_ahead, data.main_behind);
+				}
+			} else if (data.main_ahead > 0) {
+				if (use_parens) {
+					strbuf_color_addf(indicators, COLOR_AHEAD, "(↑%d)", data.main_ahead);
+				} else {
+					strbuf_color_addf(indicators, COLOR_AHEAD, "↑%d", data.main_ahead);
+				}
+			} else if (data.main_behind > 0) {
+				if (use_parens) {
+					strbuf_color_addf(indicators, COLOR_BEHIND, "(↓%d)", data.main_behind);
+				} else {
+					strbuf_color_addf(indicators, COLOR_BEHIND, "↓%d", data.main_behind);
+				}
+			}
+		} else {
+			if (use_parens) {
+				strbuf_color_addf(indicators, COLOR_DIVERGED, "(↕)");
+			} else {
+				strbuf_color_addf(indicators, COLOR_DIVERGED, "↕");
+			}
 		}
 	}
 
