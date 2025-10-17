@@ -2,6 +2,8 @@
 
 A fast, standalone git repository status tool optimized for shell prompt integration.
 
+**📖 [Full Documentation](https://krka.github.io/git-prompt/)** - Examples, usage guide, and color reference
+
 ## Features
 
 - **Fast**: Interleaved bidirectional BFS for efficient divergence calculation (~5ms typical)
@@ -16,7 +18,7 @@ A fast, standalone git repository status tool optimized for shell prompt integra
 Clone the repository with submodules:
 
 ```bash
-git clone --recursive https://github.com/yourusername/git-prompt
+git clone --recursive https://github.com/krka/git-prompt
 cd git-prompt
 make
 ```
