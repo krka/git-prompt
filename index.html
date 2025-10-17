@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>git-prompt - Fast Git Status for Your Shell Prompt</title>
+    <link rel="stylesheet" href="test-styles.css">
+    <style>
+        .hero {
+            background: linear-gradient(135deg, #252526 0%, #1e1e1e 100%);
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 40px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        .hero h1 {
+            color: #4ec9b0;
+            margin: 0 0 20px 0;
+            font-size: 2.5em;
+        }
+        .hero p {
+            color: #cccccc;
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .install-box {
+            background-color: #1d1f21;
+            border: 1px solid #3e3e42;
+            border-left: 4px solid #4ec9b0;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        .install-box code {
+            color: #8abeb7;
+            font-size: 14px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 4px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #8abf68;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th {
+            background-color: #252526;
+            color: #cccccc;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #3e3e42;
+            font-weight: 600;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        tr:hover {
+            background-color: #2d2d30;
+        }
+        .test-name {
+            color: #d4d4d4;
+            font-size: 0.95em;
+        }
+        .color-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .color-item {
+            background-color: #1d1f21;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .color-item h4 {
+            margin: 0 0 8px 0;
+            font-size: 0.95em;
+        }
+        .color-item p {
+            margin: 0;
+            font-size: 0.85em;
+            color: #858585;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>git-prompt</h1>
+        <p>Fast, colorful git repository status for your shell prompt</p>
+        <p style="color: #858585; font-size: 0.9em;">Built on libgit2 for maximum performance</p>
+    </div>
+
+    <div class="section">
+        <h2>Features</h2>
+        <ul class="feature-list">
+            <li>⚡ Lightning fast - built directly on git's internal library (libgit.a)</li>
+            <li>🎨 Color-coded status at a glance (green/yellow/red/cyan/gray)</li>
+            <li>📊 Branch tracking with upstream divergence indicators</li>
+            <li>🔄 Detects ongoing operations (merge, rebase, cherry-pick, bisect, etc.)</li>
+            <li>💾 Stash indicator</li>
+            <li>⚙️ Large repository mode for performance optimization</li>
+            <li>🔍 Conflict detection and highlighting</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Installation</h2>
+
+        <h3>Quick Install (from release binaries)</h3>
+        <div class="install-box">
+            <code>
+# Download the latest release<br>
+curl -L -o git-prompt https://ghe.spotify.net/krka/git-prompt/releases/latest/download/git-prompt<br>
+chmod +x git-prompt<br>
+sudo mv git-prompt /usr/local/bin/
+            </code>
+        </div>
+
+        <h3>Build from Source</h3>
+        <div class="install-box">
+            <code>
+# Clone the repository<br>
+git clone https://ghe.spotify.net/krka/git-prompt.git<br>
+cd git-prompt<br>
+<br>
+# Build (git submodule will be initialized automatically)<br>
+make<br>
+<br>
+# Install (optional)<br>
+sudo make install
+            </code>
+        </div>
+
+        <h3>Shell Integration</h3>
+        <p>Add to your <code>~/.bashrc</code> or <code>~/.bash_profile</code>:</p>
+        <div class="install-box">
+            <code>
+# Simple version<br>
+PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git-prompt) \\$ '<br>
+<br>
+# Or use the function wrapper for more control<br>
+git_prompt() {<br>
+&nbsp;&nbsp;git-prompt<br>
+}<br>
+PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
+            </code>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Usage & Color Meanings</h2>
+
+        <div class="color-legend">
+            <div class="color-item">
+                <h4><span class="ansi2">GREEN</span> - Clean working tree</h4>
+                <p>No uncommitted changes, everything is clean</p>
+            </div>
+            <div class="color-item">
+                <h4><span class="ansi3">YELLOW</span> - Staged changes</h4>
+                <p>Changes are staged and ready to commit</p>
+            </div>
+            <div class="color-item">
+                <h4><span class="ansi1">RED</span> - Unstaged changes or conflicts</h4>
+                <p>Modified files that need to be staged, or merge conflicts</p>
+            </div>
+            <div class="color-item">
+                <h4><span class="ansi6">CYAN</span> - Untracked files only</h4>
+                <p>New files that haven't been added to git yet</p>
+            </div>
+            <div class="color-item">
+                <h4><span class="ansi7">GRAY</span> - Large repository mode</h4>
+                <p>Status checks skipped for performance (repo exceeds size threshold)</p>
+            </div>
+            <div class="color-item">
+                <h4><span class="ansi4">BLUE</span> - Ahead of upstream</h4>
+                <p>Local commits that need to be pushed (↑N)</p>
+            </div>
+            <div class="color-item">
+                <h4><span class="ansi3">YELLOW</span> - Behind upstream</h4>
+                <p>Remote commits that need to be pulled (↓N)</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Understanding the Indicators</h2>
+
+        <h3>Upstream Tracking Indicators</h3>
+        <p>When your branch tracks an upstream branch, git-prompt shows how far ahead or behind you are:</p>
+        <ul>
+            <li><strong><span class="ansi4">↑N</span></strong> - You are N commits ahead of upstream (you have local commits to push)</li>
+            <li><strong><span class="ansi3">↓N</span></strong> - You are N commits behind upstream (remote has commits you need to pull)</li>
+            <li><strong><span class="ansi1">↑N↓M</span></strong> - Diverged: you're N ahead and M behind (branches have diverged, may need merge or rebase)</li>
+            <li><strong><span class="ansi1">↕</span></strong> - Too far diverged (exceeds traversal limit, exact count not computed for performance)</li>
+        </ul>
+        <p><strong>Parentheses vs. no parentheses:</strong></p>
+        <ul>
+            <li><strong>(↑2)</strong> - Tracking your configured upstream branch (e.g., <code>origin/feature</code>)</li>
+            <li><strong>↑3</strong> - Divergence from the default main branch (e.g., <code>origin/main</code> or <code>origin/master</code>)</li>
+        </ul>
+        <p>You can see both at once: <code>[feature] <span class="ansi1">↑4↓3</span><span class="ansi4">(↑1)</span></code> means your feature branch is 4 commits ahead and 3 behind origin/main, plus 1 commit ahead of origin/feature.</p>
+
+        <h3>Git Operation States</h3>
+        <p>When a git operation is in progress, git-prompt shows the state and next action:</p>
+        <ul>
+            <li><strong><span class="ansi1">[merge:conflict]</span></strong> - Merge has conflicts that need resolution, then <code>git commit</code></li>
+            <li><strong><span class="ansi6">[merge:commit]</span></strong> - Merge succeeded but awaiting commit (from <code>git merge --no-commit</code>)</li>
+            <li><strong><span class="ansi1">[rebase:conflict]</span></strong> - Rebase stopped on conflicts, fix them then <code>git rebase --continue</code></li>
+            <li><strong><span class="ansi6">[rebase:continue]</span></strong> - Rebase paused for editing, run <code>git rebase --continue</code> when ready</li>
+            <li><strong><span class="ansi1">[cherrypick:conflict]</span></strong> - Cherry-pick has conflicts, resolve and <code>git cherry-pick --continue</code></li>
+            <li><strong><span class="ansi1">[revert:conflict]</span></strong> - Revert has conflicts, resolve and <code>git revert --continue</code></li>
+        </ul>
+        <p><strong>Color guide:</strong> <span class="ansi1">Red</span> means conflicts need resolution, <span class="ansi6">Cyan</span> means ready to continue.</p>
+
+        <h3>Other Indicators</h3>
+        <ul>
+            <li><strong>⚡</strong> - Detached HEAD (not on any branch, might be on a tag or specific commit)</li>
+            <li><strong>🎒</strong> - You have stashed changes</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Examples</h2>
+        <p>Below are real examples of git-prompt output for different repository states:</p>
+
+        <table>
+    <thead>
+        <tr>
+            <th style="width: 40%">Description</th>
+            <th style="width: 30%">Output</th>
+            <th style="width: 30%; font-style: italic;">(If large repo)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="test-name">Detached HEAD</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[842fbac]</span> ⚡</div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[842fbac]</span> ⚡</div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Create stash</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span> 🎒</div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span> 🎒</div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Clean working tree</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Modified file unstaged</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi1">[master]</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Modified file staged</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi3">[master]</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Untracked files only</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi6">[master]</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Merge with conflicts</td>
+            <td colspan="2"><div class="terminal"><span class="ansi1">[master]</span> <span class="ansi1">[merge:conflict]</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Rebase with conflicts</td>
+            <td colspan="2"><div class="terminal"><span class="ansi1">[545c30c]</span> ⚡<span class="ansi1">[rebase:conflict]</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Ahead of upstream (need to push)</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span> <span class="ansi4">(↑1)</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span> <span class="ansi4">(↑1)</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Behind upstream (need to pull)</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span> <span class="ansi3">(↓1)</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span> <span class="ansi3">(↓1)</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Diverged from upstream</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span> <span class="ansi1">(↑1↓1)</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span> <span class="ansi1">(↑1↓1)</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Feature branch ahead of origin/main</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[feature]</span> <span class="ansi4">↑2</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[feature]</span> <span class="ansi4">↑2</span></div></td>
+        </tr>
+        <tr>
+            <td class="test-name">Feature branch: ahead of origin/feature, diverged from origin/master</td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[feature]</span> <span class="ansi1">↑4↓3</span><span class="ansi4">(↑1)</span></div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[feature]</span> <span class="ansi1">↑4↓3</span><span class="ansi4">(↑1)</span></div></td>
+        </tr>
+    </tbody>
+</table>
+
+    </div>
+
+    <div class="section">
+        <h2>Command-Line Options</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 30%">Option</th>
+                    <th style="width: 70%">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>--no-color</code></td>
+                    <td>Disable ANSI color output (use for testing or terminals without color support)</td>
+                </tr>
+                <tr>
+                    <td><code>--debug</code></td>
+                    <td>Show timing information on stderr (useful for performance analysis)</td>
+                </tr>
+                <tr>
+                    <td><code>--large-repo-size=N</code></td>
+                    <td>Set index size threshold in bytes (default: 5000000 = 5MB). Repos larger than this skip expensive status checks</td>
+                </tr>
+                <tr>
+                    <td><code>--local</code></td>
+                    <td>Skip reading global git config (useful in tests to avoid config interference)</td>
+                </tr>
+                <tr>
+                    <td><code>--max-traversal=N</code></td>
+                    <td>Maximum number of commits to traverse when computing divergence (default: 100)</td>
+                </tr>
+                <tr>
+                    <td><code>--help</code></td>
+                    <td>Show help message and exit</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Performance</h2>
+        <p>git-prompt is optimized for speed:</p>
+        <ul class="feature-list">
+            <li>Built directly on libgit.a from the git source tree - no shell scripts or external git commands</li>
+            <li>Large repository mode automatically skips expensive operations in massive repos</li>
+            <li>Bidirectional BFS algorithm for efficient ahead/behind computation</li>
+            <li>Results caching to avoid redundant traversals</li>
+            <li>Typical execution time: &lt;10ms for normal repos, &lt;1ms for cached results</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Contributing</h2>
+        <p>Contributions are welcome! Please:</p>
+        <ol>
+            <li>Fork the repository</li>
+            <li>Create a feature branch</li>
+            <li>Add tests for any new functionality (see <code>tests/test_cases.yaml</code>)</li>
+            <li>Ensure all tests pass: <code>make test</code></li>
+            <li>Submit a pull request</li>
+        </ol>
+        <p>The test suite includes comprehensive examples covering all git states and edge cases.</p>
+    </div>
+
+    <div class="footer">
+        Generated documentation for git-prompt
+    </div>
+</body>
+</html>
