@@ -471,6 +471,31 @@ tests:
   - git commit -m "Feature commit 2"
   expected: '{GREEN}[feature]{} {BLUE}↑2{}'
   expected_large: '{GRAY}[feature]{} {BLUE}↑2{}'
+- description: Feature branch ahead of origin/master without origin/HEAD
+  name: Feature branch ahead of origin/master (no origin/HEAD symref)
+  group: upstream
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "Base commit"
+  - git remote add origin https://example.com/repo.git
+  - git update-ref refs/remotes/origin/master HEAD
+  - git checkout -b feature
+  - echo "feature1" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature commit 1"
+  - echo "feature2" > feature2.txt
+  - git add feature2.txt
+  - git commit -m "Feature commit 2"
+  - echo "feature3" > feature3.txt
+  - git add feature3.txt
+  - git commit -m "Feature commit 3"
+  expected: '{GREEN}[feature]{} {BLUE}↑3{}'
+  expected_large: '{GRAY}[feature]{} {BLUE}↑3{}'
 - description: Feature branch behind origin/main
   name: Feature branch behind origin/main
   group: upstream
