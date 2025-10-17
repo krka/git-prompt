@@ -127,7 +127,6 @@
             <li>🎨 Color-coded status at a glance (green/yellow/red/cyan/gray)</li>
             <li>📊 Branch tracking with upstream divergence indicators</li>
             <li>🔄 Detects ongoing operations (merge, rebase, cherry-pick, bisect, etc.)</li>
-            <li>🎒 Stash indicator</li>
             <li>⚙️ Large repository mode for performance optimization</li>
             <li>🔍 Conflict detection and highlighting</li>
         </ul>
@@ -178,7 +177,8 @@ PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
     </div>
 
     <div class="section">
-        <h2>Usage & Color Meanings</h2>
+        <h2>Branch Colors</h2>
+        <p>The branch name color indicates your working tree status:</p>
 
         <div class="color-legend">
             <div class="color-item">
@@ -200,14 +200,6 @@ PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
             <div class="color-item">
                 <h4><span class="ansi7">GRAY</span> - Large repository mode</h4>
                 <p>Status checks skipped for performance (repo exceeds size threshold)</p>
-            </div>
-            <div class="color-item">
-                <h4><span class="ansi4">BLUE</span> - Ahead of upstream</h4>
-                <p>Local commits that need to be pushed (↑N)</p>
-            </div>
-            <div class="color-item">
-                <h4><span class="ansi3">YELLOW</span> - Behind upstream</h4>
-                <p>Remote commits that need to be pulled (↓N)</p>
             </div>
         </div>
     </div>
@@ -245,7 +237,7 @@ PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
         <h3>Other Indicators</h3>
         <ul>
             <li><strong>⚡</strong> - Detached HEAD (not on any branch, might be on a tag or specific commit)</li>
-            <li><strong>🎒</strong> - You have stashed changes</li>
+            <li><strong>💾</strong> - You have stashed changes</li>
         </ul>
     </div>
 
@@ -269,8 +261,8 @@ PS1='\\[\\e[0;36m\\]\\w\\[\\e[0m\\] $(git_prompt) \\$ '
         </tr>
         <tr>
             <td class="test-name">Create stash</td>
-            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span> 🎒</div></td>
-            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span> 🎒</div></td>
+            <td style="width: 30%"><div class="terminal"><span class="ansi2">[master]</span> 💾</div></td>
+            <td style="width: 30%; color: #858585;"><div class="terminal"><span class="ansi7">[master]</span> 💾</div></td>
         </tr>
         <tr>
             <td class="test-name">Clean working tree</td>
