@@ -29,7 +29,7 @@
 #include "oidmap.h"
 #include "remote.h"
 #include "hex.h"
-#include "graph-traversal.h"
+#include "graph-distance.h"
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/time.h>

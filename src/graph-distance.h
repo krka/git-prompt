@@ -1,5 +1,5 @@
-#ifndef GRAPH_TRAVERSAL_H
-#define GRAPH_TRAVERSAL_H
+#ifndef GRAPH_DISTANCE_H
+#define GRAPH_DISTANCE_H
 
 #include "git-compat-util.h"
 #include "commit.h"
@@ -42,4 +42,4 @@ struct bfs_divergence_result bfs_find_divergence(const struct object_id *start,
 						 const struct object_id *target, int max_steps,
 						 int debug);
 
-#endif /* GRAPH_TRAVERSAL_H */
+#endif /* GRAPH_DISTANCE_H */

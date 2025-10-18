@@ -38,7 +38,7 @@ GIT_CFLAGS = -I$(SUBMODULE_DIR)
 
 # Source files
 SRC = src/git-prompt.c
-SRC_GRAPH = src/graph-traversal.c
+SRC_GRAPH = src/graph-distance.c
 
 # Core binaries (always built)
 EXECUTABLE = $(TARGET_DIR)/git-prompt                          # Patched, stripped, optimized (shipping)
@@ -46,9 +46,9 @@ EXECUTABLE_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched       # Raw baseline (
 EXECUTABLE_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug  # Patched with debug (analysis)
 
 # Object files
-OBJ_MAIN = $(TARGET_DIR)/git-prompt.o $(TARGET_DIR)/graph-traversal.o
-OBJ_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched.o $(TARGET_DIR)/graph-traversal-unpatched.o
-OBJ_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug.o $(TARGET_DIR)/graph-traversal-patched-debug.o
+OBJ_MAIN = $(TARGET_DIR)/git-prompt.o $(TARGET_DIR)/graph-distance.o
+OBJ_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched.o $(TARGET_DIR)/graph-distance-unpatched.o
+OBJ_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug.o $(TARGET_DIR)/graph-distance-patched-debug.o
 
 # Build flags for unpatched (baseline reference)
 CFLAGS_UNPATCHED = -g -O2 -Wall
@@ -64,12 +64,12 @@ LDFLAGS_PATCHED_DEBUG = -Wl,--gc-sections -Wl,-O2 -flto
 
 # Sanitizer binaries (for testing)
 EXECUTABLE_ASAN = $(TARGET_DIR)/git-prompt-asan
-OBJ_ASAN = $(TARGET_DIR)/git-prompt-asan.o $(TARGET_DIR)/graph-traversal-asan.o
+OBJ_ASAN = $(TARGET_DIR)/git-prompt-asan.o $(TARGET_DIR)/graph-distance-asan.o
 CFLAGS_ASAN = -g -O1 -Wall -fsanitize=address -fno-omit-frame-pointer
 LDFLAGS_ASAN = -fsanitize=address
 
 EXECUTABLE_UBSAN = $(TARGET_DIR)/git-prompt-ubsan
-OBJ_UBSAN = $(TARGET_DIR)/git-prompt-ubsan.o $(TARGET_DIR)/graph-traversal-ubsan.o
+OBJ_UBSAN = $(TARGET_DIR)/git-prompt-ubsan.o $(TARGET_DIR)/graph-distance-ubsan.o
 CFLAGS_UBSAN = -g -O1 -Wall -fsanitize=undefined -fno-omit-frame-pointer
 LDFLAGS_UBSAN = -fsanitize=undefined
 
@@ -164,7 +164,7 @@ $(TARGET_DIR):
 $(TARGET_DIR)/git-prompt-unpatched.o: $(SRC) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-traversal-unpatched.o: $(SRC_GRAPH) | $(TARGET_DIR)
+$(TARGET_DIR)/graph-distance-unpatched.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_UNPATCHED): $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
@@ -177,7 +177,7 @@ $(EXECUTABLE_UNPATCHED): $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_
 $(TARGET_DIR)/git-prompt.o: $(SRC) | $(TARGET_DIR)
 	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-traversal.o: $(SRC_GRAPH) | $(TARGET_DIR)
+$(TARGET_DIR)/graph-distance.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE): $(OBJ_MAIN) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE)
@@ -186,7 +186,7 @@ $(EXECUTABLE): $(OBJ_MAIN) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED
 $(TARGET_DIR)/git-prompt-patched-debug.o: $(SRC) | $(TARGET_DIR)
 	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-traversal-patched-debug.o: $(SRC_GRAPH) | $(TARGET_DIR)
+$(TARGET_DIR)/graph-distance-patched-debug.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_PATCHED_DEBUG): $(OBJ_PATCHED_DEBUG) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE)
@@ -263,7 +263,7 @@ analyze:
 $(TARGET_DIR)/git-prompt-asan.o: $(SRC) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-traversal-asan.o: $(SRC_GRAPH) | $(TARGET_DIR)
+$(TARGET_DIR)/graph-distance-asan.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_ASAN): $(OBJ_ASAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
@@ -272,7 +272,7 @@ $(EXECUTABLE_ASAN): $(OBJ_ASAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTAB
 $(TARGET_DIR)/git-prompt-ubsan.o: $(SRC) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-traversal-ubsan.o: $(SRC_GRAPH) | $(TARGET_DIR)
+$(TARGET_DIR)/graph-distance-ubsan.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_UBSAN): $(OBJ_UBSAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)

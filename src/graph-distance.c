@@ -1,9 +1,9 @@
 /*
- * graph-traversal.c - Bidirectional BFS for commit divergence calculation
+ * graph-distance.c - Bidirectional BFS for commit divergence calculation
  */
 #define USE_THE_REPOSITORY_VARIABLE
 
-#include "graph-traversal.h"
+#include "graph-distance.h"
 #include "commit.h"
 #include "oidmap.h"
 #include "hex.h"
