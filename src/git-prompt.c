@@ -131,6 +131,7 @@ static int max_traversal = MAX_TRAVERSAL_DEFAULT;
 static const char *const prompt_usage[] = {
 	"git prompt [--help] [--no-color] [--debug] [--large-repo-size=<bytes>] "
 	"[--max-traversal=<commits>] [--local]",
+	"git prompt distance --from=<commit> --to=<commit> [--max-traversal=<commits>] [--debug]",
 	NULL};
 
 static const char prompt_help[] =
@@ -191,7 +192,17 @@ static const char prompt_help[] =
 	"SHELL INTEGRATION:\n"
 	"  Bash:  PS1='$(git prompt)\\$ '\n"
 	"  Zsh:   setopt PROMPT_SUBST; PROMPT='$(git prompt)%% '\n"
-	"  Fish:  function fish_prompt; git prompt; end\n";
+	"  Fish:  function fish_prompt; git prompt; end\n"
+	"\n"
+	"DISTANCE SUBCOMMAND:\n"
+	"  git prompt distance --from=<commit> --to=<commit>\n"
+	"\n"
+	"  Compute graph distance between two commits. Useful for scripts and tools.\n"
+	"  Output format: \"ahead,behind\" (e.g., \"12,3\" or \"-1,-1\" if diverged)\n"
+	"\n"
+	"  Examples:\n"
+	"    git prompt distance --from=HEAD --to=origin/main\n"
+	"    git prompt distance --from=feature --to=main\n";
 
 static void show_help(void)
 {
@@ -1064,6 +1075,8 @@ int main(int argc, const char **argv)
 	struct timeval tv_start_total, tv_end_total;
 	int no_color = 0;
 	int nongit_ok = 0;
+	const char *from_commit = NULL;
+	const char *to_commit = NULL;
 	const struct option options[] = {
 		OPT_BOOL(0, "no-color", &no_color, "disable colored output"),
 		OPT_BOOL(0, "debug", &debug_mode, "show timing information"),
@@ -1073,6 +1086,8 @@ int main(int argc, const char **argv)
 			0, "max-traversal", &max_traversal,
 			"maximum commits to traverse in distance calculation (default: 1000)"),
 		OPT_BOOL(0, "local", &local_mode, "skip reading global git config"),
+		OPT_STRING(0, "from", &from_commit, "commit", "start commit for distance calculation"),
+		OPT_STRING(0, "to", &to_commit, "commit", "target commit for distance calculation"),
 		OPT_END()};
 	struct strbuf branch = STRBUF_INIT;
 	struct strbuf indicators = STRBUF_INIT;
@@ -1116,6 +1131,36 @@ int main(int argc, const char **argv)
 	/* Start timing after options are parsed */
 	if (debug_mode) {
 		gettimeofday(&tv_start_total, NULL);
+	}
+
+	/* Handle distance subcommand */
+	if (argc > 0 && !strcmp(argv[0], "distance")) {
+		struct object_id from_oid, to_oid;
+
+		/* Validate required arguments */
+		if (!from_commit || !to_commit) {
+			fprintf(stderr, "error: distance subcommand requires --from and --to arguments\n");
+			usage_with_options(prompt_usage, options);
+		}
+
+		/* Resolve commit OIDs */
+		if (repo_get_oid(the_repository, from_commit, &from_oid)) {
+			fprintf(stderr, "error: cannot resolve --from commit: %s\n", from_commit);
+			return 1;
+		}
+
+		if (repo_get_oid(the_repository, to_commit, &to_oid)) {
+			fprintf(stderr, "error: cannot resolve --to commit: %s\n", to_commit);
+			return 1;
+		}
+
+		/* Calculate distance */
+		struct bfs_distance_result result = bfs_find_distance(&from_oid, &to_oid, max_traversal, debug_mode);
+
+		/* Output in machine-readable format */
+		printf("%d,%d\n", result.ahead, result.behind);
+
+		return 0;
 	}
 
 	if (argc > 0) {
