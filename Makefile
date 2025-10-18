@@ -36,8 +36,9 @@ LIBS = -lpthread -lz -lrt
 # Include paths from git's build
 GIT_CFLAGS = -I$(SUBMODULE_DIR)
 
-# Main source file
+# Source files
 SRC = src/git-prompt.c
+SRC_GRAPH = src/graph-traversal.c
 
 # Core binaries (always built)
 EXECUTABLE = $(TARGET_DIR)/git-prompt                          # Patched, stripped, optimized (shipping)
@@ -45,9 +46,9 @@ EXECUTABLE_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched       # Raw baseline (
 EXECUTABLE_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug  # Patched with debug (analysis)
 
 # Object files
-OBJ_MAIN = $(TARGET_DIR)/git-prompt.o
-OBJ_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched.o
-OBJ_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug.o
+OBJ_MAIN = $(TARGET_DIR)/git-prompt.o $(TARGET_DIR)/graph-traversal.o
+OBJ_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched.o $(TARGET_DIR)/graph-traversal-unpatched.o
+OBJ_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug.o $(TARGET_DIR)/graph-traversal-patched-debug.o
 
 # Build flags for unpatched (baseline reference)
 CFLAGS_UNPATCHED = -g -O2 -Wall
@@ -63,12 +64,12 @@ LDFLAGS_PATCHED_DEBUG = -Wl,--gc-sections -Wl,-O2 -flto
 
 # Sanitizer binaries (for testing)
 EXECUTABLE_ASAN = $(TARGET_DIR)/git-prompt-asan
-OBJ_ASAN = $(TARGET_DIR)/git-prompt-asan.o
+OBJ_ASAN = $(TARGET_DIR)/git-prompt-asan.o $(TARGET_DIR)/graph-traversal-asan.o
 CFLAGS_ASAN = -g -O1 -Wall -fsanitize=address -fno-omit-frame-pointer
 LDFLAGS_ASAN = -fsanitize=address
 
 EXECUTABLE_UBSAN = $(TARGET_DIR)/git-prompt-ubsan
-OBJ_UBSAN = $(TARGET_DIR)/git-prompt-ubsan.o
+OBJ_UBSAN = $(TARGET_DIR)/git-prompt-ubsan.o $(TARGET_DIR)/graph-traversal-ubsan.o
 CFLAGS_UBSAN = -g -O1 -Wall -fsanitize=undefined -fno-omit-frame-pointer
 LDFLAGS_UBSAN = -fsanitize=undefined
 
@@ -160,27 +161,36 @@ $(TARGET_DIR):
 # ============================================================================
 # Unpatched build (baseline reference)
 # ============================================================================
-$(OBJ_UNPATCHED): $(SRC) | $(TARGET_DIR)
+$(TARGET_DIR)/git-prompt-unpatched.o: $(SRC) | $(TARGET_DIR)
+	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/graph-traversal-unpatched.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_UNPATCHED): $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
-	$(CC) $(LDFLAGS_UNPATCHED) -o $@ $< $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
+	$(CC) $(LDFLAGS_UNPATCHED) -o $@ $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
 
 # ============================================================================
 # Patched builds (main shipping binary + debug analysis binary)
 # ============================================================================
 # These builds use cached patched libraries (no need to patch again!)
-$(OBJ_MAIN): $(SRC) | $(TARGET_DIR)
+$(TARGET_DIR)/git-prompt.o: $(SRC) | $(TARGET_DIR)
+	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/graph-traversal.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE): $(OBJ_MAIN) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE)
-	gcc $(LDFLAGS_MAIN) -o $@ $< $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE) $(LIBS)
+	gcc $(LDFLAGS_MAIN) -o $@ $(OBJ_MAIN) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE) $(LIBS)
 
-$(OBJ_PATCHED_DEBUG): $(SRC) | $(TARGET_DIR)
+$(TARGET_DIR)/git-prompt-patched-debug.o: $(SRC) | $(TARGET_DIR)
+	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/graph-traversal-patched-debug.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_PATCHED_DEBUG): $(OBJ_PATCHED_DEBUG) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE)
-	gcc $(LDFLAGS_PATCHED_DEBUG) -o $@ $< $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE) $(LIBS)
+	gcc $(LDFLAGS_PATCHED_DEBUG) -o $@ $(OBJ_PATCHED_DEBUG) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE) $(LIBS)
 
 # Test all binaries (test runner auto-discovers and tests all available binaries)
 .PHONY: test
@@ -250,17 +260,23 @@ analyze:
 # ============================================================================
 # Sanitizer builds (for memory error detection and undefined behavior)
 # ============================================================================
-$(OBJ_ASAN): $(SRC) | $(TARGET_DIR)
+$(TARGET_DIR)/git-prompt-asan.o: $(SRC) | $(TARGET_DIR)
+	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/graph-traversal-asan.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_ASAN): $(OBJ_ASAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
-	$(CC) $(LDFLAGS_ASAN) -o $@ $< $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
+	$(CC) $(LDFLAGS_ASAN) -o $@ $(OBJ_ASAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
 
-$(OBJ_UBSAN): $(SRC) | $(TARGET_DIR)
+$(TARGET_DIR)/git-prompt-ubsan.o: $(SRC) | $(TARGET_DIR)
+	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/graph-traversal-ubsan.o: $(SRC_GRAPH) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_UBSAN): $(OBJ_UBSAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
-	$(CC) $(LDFLAGS_UBSAN) -o $@ $< $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
+	$(CC) $(LDFLAGS_UBSAN) -o $@ $(OBJ_UBSAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
 
 # Run all static analysis tools (cppcheck and clang-tidy)
 .PHONY: check-all

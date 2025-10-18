@@ -29,6 +29,7 @@
 #include "oidmap.h"
 #include "remote.h"
 #include "hex.h"
+#include "graph-traversal.h"
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -547,273 +548,6 @@ struct prompt_context {
 };
 
 /*
- * BFS node tracking during graph traversal (ring buffer entry).
- */
-struct bfs_node {
-	struct object_id oid;
-	int distance; /* Steps from the origin (start or target) */
-};
-
-/*
- * BFS state for one side of bidirectional search (stack-allocated).
- */
-struct bfs_state {
-	struct bfs_node queue[BFS_QUEUE_SIZE]; /* Ring buffer for this side */
-	int head;			       /* Queue head index */
-	int tail;			       /* Queue tail index */
-	int size;			       /* Current queue size */
-	int steps_remaining;		       /* Budget remaining for this side */
-};
-
-/*
- * Entry for storing distances in oidmap during interleaved bidirectional BFS.
- */
-struct bfs_distance_entry {
-	struct oidmap_entry entry; /* Must be first member */
-	int dist_from_start;	   /* Distance from start (-1 if not reached) */
-	int dist_from_target;	   /* Distance from target (-1 if not reached) */
-};
-
-/*
- * Result of bidirectional BFS divergence calculation.
- */
-struct bfs_divergence_result {
-	int ahead;	     /* Commits in start but not in target (-1 if not found) */
-	int behind;	     /* Commits in target but not in start (-1 if not found) */
-	int commits_visited; /* Number of commits traversed (traversal cost) */
-};
-
-/*
- * Helper to get or create a distance entry in the map.
- * Returns NULL if entry exists, or the newly created entry if it didn't exist.
- */
-static struct bfs_distance_entry *get_or_create_entry(struct oidmap *distances,
-						      const struct object_id *oid)
-{
-	struct bfs_distance_entry *entry = oidmap_get(distances, oid);
-	if (entry) {
-		return NULL; /* Already exists */
-	}
-
-	entry = xmalloc(sizeof(*entry));
-	oidcpy(&entry->entry.oid, oid);
-	entry->dist_from_start = -1;
-	entry->dist_from_target = -1;
-	oidmap_put(distances, entry);
-	return entry;
-}
-
-/*
- * Interleaved bidirectional BFS to find divergence between two commits.
- *
- * Strategy:
- * 1. Maintain two queues (indexed 0=start, 1=target) for perfect interleaving
- * 2. Track distances from both sides in a single hashmap
- * 3. Alternate: process one from each queue in round-robin fashion
- * 4. When we visit a node that has already been reached from the other side, we found the merge-base
- * 5. Result: ahead = dist_from_start, behind = dist_from_target at intersection
- *
- * Performance: O(commits) where commits ≤ 2 * max_steps
- *              Limited by max_traversal parameter (default 1000)
- *              Early termination when merge-base found
- * Safe for large repo mode: Yes (graph traversal independent of worktree/index size)
- *
- * Returns:
- *   - {ahead, behind} if relationship found within max_steps (both >= 0)
- *   - {-1, -1} if too far apart (no common ancestor within max_steps)
- */
-static struct bfs_divergence_result
-bfs_find_divergence(const struct object_id *start,  /* Usually HEAD */
-		    const struct object_id *target, /* Usually origin/master or upstream */
-		    int max_steps)
-{
-	struct bfs_divergence_result result = {-1, -1, 0};
-	struct oidmap distances;
-
-	/* Two BFS states: [0]=start side, [1]=target side (stack-allocated) */
-	struct bfs_state states[2] = {
-		{.head = 0, .tail = 0, .size = 0, .steps_remaining = max_steps},
-		{.head = 0, .tail = 0, .size = 0, .steps_remaining = max_steps}};
-
-	const struct object_id *initial_oids[2];
-	int commits_visited = 0;
-	int side;
-
-	/* Quick check: start == target */
-	if (oideq(start, target)) {
-		result.ahead = 0;
-		result.behind = 0;
-		result.commits_visited = 0;
-		return result;
-	}
-
-	/* Initialize distance map */
-	oidmap_init(&distances, 0);
-
-	if (debug_mode) {
-		fprintf(stderr, "[DEBUG] BFS: two-queue interleaved search...\n");
-	}
-
-	/* Setup initial state for both sides */
-	initial_oids[0] = start;
-	initial_oids[1] = target;
-
-	/* Enqueue initial nodes */
-	for (side = 0; side < 2; side++) {
-		struct bfs_state *state = &states[side];
-		struct bfs_distance_entry *entry =
-			get_or_create_entry(&distances, initial_oids[side]);
-		if (entry) {
-			if (side == 0) {
-				entry->dist_from_start = 0;
-			} else {
-				entry->dist_from_target = 0;
-			}
-
-			oidcpy(&state->queue[state->tail].oid, initial_oids[side]);
-			state->queue[state->tail].distance = 0;
-			state->tail = (state->tail + 1) & (BFS_QUEUE_SIZE - 1);
-			state->size++;
-		}
-	}
-
-	/* Interleaved BFS - alternate between queues */
-	int made_progress = 1;
-	while (made_progress) {
-		made_progress = 0;
-
-		for (side = 0; side < 2; side++) {
-			struct bfs_state *state = &states[side];
-
-			if (state->size <= 0 || state->steps_remaining <= 0) {
-				continue;
-			}
-
-			made_progress = 1;
-
-			/* Dequeue from this side */
-			struct bfs_node current = state->queue[state->head];
-			state->head = (state->head + 1) & (BFS_QUEUE_SIZE - 1);
-			state->size--;
-			commits_visited++;
-
-			/* Check if we've found the intersection */
-			const struct bfs_distance_entry *current_entry =
-				oidmap_get(&distances, &current.oid);
-			if (current_entry && current_entry->dist_from_start >= 0 &&
-			    current_entry->dist_from_target >= 0) {
-				/* Found merge-base! */
-				result.ahead = current_entry->dist_from_start;
-				result.behind = current_entry->dist_from_target;
-				result.commits_visited = commits_visited;
-				if (debug_mode) {
-					fprintf(stderr,
-						"[DEBUG] BFS: found intersection after %d commits, "
-						"ahead=%d, behind=%d\n",
-						commits_visited, result.ahead, result.behind);
-				}
-				goto cleanup;
-			}
-
-			/* Parse commit and traverse parents */
-			struct commit *commit = lookup_commit(the_repository, &current.oid);
-			if (commit && !repo_parse_commit(the_repository, commit)) {
-				struct commit_list *parent = commit->parents;
-				while (parent) {
-					const struct object_id *parent_oid =
-						&parent->item->object.oid;
-					struct bfs_distance_entry *parent_entry =
-						oidmap_get(&distances, parent_oid);
-					int parent_dist = current.distance + 1;
-
-					if (!parent_entry) {
-						parent_entry =
-							get_or_create_entry(&distances, parent_oid);
-						if (!parent_entry) {
-							parent = parent->next;
-							continue;
-						}
-					}
-
-					/* Update distance for this side */
-					int *dist_field = (side == 0)
-								  ? &parent_entry->dist_from_start
-								  : &parent_entry->dist_from_target;
-					const int *other_dist_field =
-						(side == 0) ? &parent_entry->dist_from_target
-							    : &parent_entry->dist_from_start;
-
-					if (*dist_field < 0) {
-						*dist_field = parent_dist;
-
-						/* Check if we've found intersection */
-						if (*other_dist_field >= 0) {
-							result.ahead =
-								parent_entry->dist_from_start;
-							result.behind =
-								parent_entry->dist_from_target;
-							result.commits_visited = commits_visited;
-							if (debug_mode) {
-								fprintf(stderr,
-									"[DEBUG] BFS: found "
-									"intersection (fast) after "
-									"%d commits, ahead=%d, "
-									"behind=%d\n",
-									commits_visited,
-									result.ahead,
-									result.behind);
-							}
-							goto cleanup;
-						}
-
-						/* Enqueue for further exploration if budget allows */
-						if (state->steps_remaining > 0) {
-							if (state->size >= BFS_QUEUE_SIZE - 1) {
-								goto cleanup;
-							}
-							oidcpy(&state->queue[state->tail].oid,
-							       parent_oid);
-							state->queue[state->tail].distance =
-								parent_dist;
-							state->tail = (state->tail + 1) &
-								      (BFS_QUEUE_SIZE - 1);
-							state->size++;
-							state->steps_remaining--;
-						}
-					}
-
-					parent = parent->next;
-				}
-			}
-		}
-	}
-
-cleanup:
-	/* Set commits_visited even when we don't find merge-base (for caching decision) */
-	if (result.commits_visited == 0) {
-		result.commits_visited = commits_visited;
-	}
-
-	if (debug_mode && result.ahead < 0) {
-		fprintf(stderr,
-			"[DEBUG] BFS: exhausted after %d commits (start steps left: %d, target "
-			"steps left: %d)\n",
-			commits_visited, states[0].steps_remaining, states[1].steps_remaining);
-	}
-
-	/* Free hashmap entries */
-	struct oidmap_iter iter;
-	struct bfs_distance_entry *entry;
-	oidmap_iter_init(&distances, &iter);
-	while ((entry = oidmap_iter_next(&iter))) {
-		free(entry);
-	}
-	oidmap_clear(&distances, 0);
-
-	return result;
-}
-
-/*
  * Section 1: Determine branch name and color based on working tree state.
  * This is pure filesystem operations - no network refs needed.
  *
@@ -1306,7 +1040,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 			}
 			/* Use bidirectional BFS to find divergence */
 			struct bfs_divergence_result main_result =
-				bfs_find_divergence(&ctx->oid, &main_oid, max_traversal);
+				bfs_find_divergence(&ctx->oid, &main_oid, max_traversal, debug_mode);
 			data.main_ahead = main_result.ahead;
 			data.main_behind = main_result.behind;
 			main_cost = main_result.commits_visited;
@@ -1325,7 +1059,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 			}
 			/* Use bidirectional BFS to find divergence */
 			struct bfs_divergence_result upstream_result =
-				bfs_find_divergence(&ctx->oid, &upstream_oid, max_traversal);
+				bfs_find_divergence(&ctx->oid, &upstream_oid, max_traversal, debug_mode);
 			data.upstream_ahead = upstream_result.ahead;
 			data.upstream_behind = upstream_result.behind;
 			upstream_cost = upstream_result.commits_visited;
