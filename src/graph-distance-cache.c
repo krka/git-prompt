@@ -31,15 +31,15 @@ void build_cache_key(struct strbuf *key, const struct object_id *head_oid,
 }
 
 /*
- * Try to read cached divergence data from .git/prompt-cache
+ * Try to read cached distance data from .git/prompt-cache
  * Performance: O(1) - single file read and parse
  * Safe for large repo mode: Yes (simple file I/O)
  *
  * Returns cache data with cached=0 if cache miss, cached=1 if cache hit
  */
-struct divergence_data read_divergence_cache(const struct strbuf *cache_key, int debug)
+struct distance_data read_distance_cache(const struct strbuf *cache_key, int debug)
 {
-	struct divergence_data data = {0, -1, -1, -1, -1};
+	struct distance_data data = {0, -1, -1, -1, -1};
 	struct strbuf cache_path = STRBUF_INIT;
 	struct strbuf line = STRBUF_INIT;
 	FILE *fp;
@@ -79,7 +79,7 @@ struct divergence_data read_divergence_cache(const struct strbuf *cache_key, int
 
 cleanup:
 	if (!data.cached && debug) {
-		fprintf(stderr, "[DEBUG] Cache: MISS (computing divergence)\n");
+		fprintf(stderr, "[DEBUG] Cache: MISS (computing distance)\n");
 	}
 
 	if (fp) {
@@ -91,13 +91,13 @@ cleanup:
 }
 
 /*
- * Write divergence data to cache atomically
+ * Write distance data to cache atomically
  * Only writes if traversal cost >= 10 (i.e., BFS visited >= 10 commits)
  *
  * Performance: O(1) - single file write (atomic via temp file + rename)
  * Safe for large repo mode: Yes (simple file I/O)
  */
-void write_divergence_cache(const struct strbuf *cache_key, const struct divergence_data *data,
+void write_distance_cache(const struct strbuf *cache_key, const struct distance_data *data,
 			     int total_cost, int debug)
 {
 	struct strbuf cache_path = STRBUF_INIT;

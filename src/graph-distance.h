@@ -5,16 +5,16 @@
 #include "commit.h"
 
 /*
- * Result of bidirectional BFS divergence calculation.
+ * Result of bidirectional BFS distance calculation.
  */
-struct bfs_divergence_result {
+struct bfs_distance_result {
 	int ahead;	     /* Commits in start but not in target (-1 if not found) */
 	int behind;	     /* Commits in target but not in start (-1 if not found) */
 	int commits_visited; /* Number of commits traversed (traversal cost) */
 };
 
 /*
- * Interleaved bidirectional BFS to find divergence between two commits.
+ * Interleaved bidirectional BFS to find distance between two commits.
  *
  * Strategy:
  * 1. Maintain two queues (indexed 0=start, 1=target) for perfect interleaving
@@ -38,8 +38,8 @@ struct bfs_divergence_result {
  *   - {ahead, behind} if relationship found within max_steps (both >= 0)
  *   - {-1, -1} if too far apart (no common ancestor within max_steps)
  */
-struct bfs_divergence_result bfs_find_divergence(const struct object_id *start,
-						 const struct object_id *target, int max_steps,
-						 int debug);
+struct bfs_distance_result bfs_find_distance(const struct object_id *start,
+					     const struct object_id *target, int max_steps,
+					     int debug);
 
 #endif /* GRAPH_DISTANCE_H */

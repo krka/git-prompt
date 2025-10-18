@@ -77,9 +77,9 @@
  * - check_git_state_file()       O(1)*     - File access() syscall (*O(n) if checking conflicts)
  * - get_misc_indicators()        O(1)      - Flag checks and ref existence
  * - get_tracking_indicators()    O(commits)- Graph traversal (limited by max_traversal)
- * - bfs_find_divergence()        O(commits)- BFS limited by max_traversal parameter
- * - read_divergence_cache()      O(1)      - Single file read
- * - write_divergence_cache()     O(1)      - Single file write
+ * - bfs_find_distance()          O(commits)- BFS limited by max_traversal parameter
+ * - read_distance_cache()        O(1)      - Single file read
+ * - write_distance_cache()       O(1)      - Single file write
  *
  * UNSAFE FOR LARGE REPO MODE (expensive, currently skipped):
  * ----------------------------------------------------------
@@ -161,7 +161,7 @@ static const char prompt_help[] =
 	"OTHER INDICATORS:\n"
 	"  ○        - No upstream configured (magenta)\n"
 	"\n"
-	"DIVERGENCE FROM MAIN (shown for feature branches):\n"
+	"DISTANCE FROM MAIN (shown for feature branches):\n"
 	"  ↑N       - N commits ahead of origin/main or origin/master (blue)\n"
 	"  ↓N       - N commits behind origin/main or origin/master (yellow)\n"
 	"  ↑N↓M     - N commits ahead, M commits behind\n"
@@ -181,7 +181,7 @@ static const char prompt_help[] =
 	"\n"
 	"PERFORMANCE:\n"
 	"  For large repositories (>5MB index), status checks are skipped for speed.\n"
-	"  Divergence calculation is limited to 1000 commits by default (configurable with "
+	"  Distance calculation is limited to 1000 commits by default (configurable with "
 	"--max-traversal).\n"
 	"  Results are cached in .git/prompt-cache when BFS visits >=10 commits.\n"
 	"\n"
@@ -704,8 +704,8 @@ static int get_branch_name_and_color(struct strbuf *branch, const char **color,
  * Uses bidirectional BFS to determine ahead/behind/diverged status.
  *
  * Two-phase approach:
- * Phase 1: Check divergence from origin/master (main codebase)
- * Phase 2: Check divergence from upstream tracking branch (what you pushed)
+ * Phase 1: Check distance from origin/master (main codebase)
+ * Phase 2: Check distance from upstream tracking branch (what you pushed)
  *
  * Performance: O(commits) where commits ≤ 2 * max_traversal (default 2000)
  *              Fast path: cache hit is O(1) (file read + parse)
@@ -721,10 +721,10 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	}
 
 	/*
-	 * Phase 1: Check divergence from default remote's default branch
+	 * Phase 1: Check distance from default remote's default branch
 	 * Skip if we're on the main branch itself.
 	 */
-	DEBUG_TIMER_START(divergence);
+	DEBUG_TIMER_START(distance);
 
 	const char *main_branch = NULL;
 	char *main_branch_allocated = NULL; /* Track if main_branch was allocated */
@@ -806,7 +806,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 					fprintf(stderr, "[DEBUG] Using fallback: %s\n", main_branch);
 				}
 			} else if (debug_mode) {
-				fprintf(stderr, "[DEBUG] No fallback refs found - skipping divergence\n");
+				fprintf(stderr, "[DEBUG] No fallback refs found - skipping distance\n");
 			}
 		}
 
@@ -826,7 +826,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	}
 
 	/*
-	 * Phase 2: Check divergence from upstream tracking branch
+	 * Phase 2: Check distance from upstream tracking branch
 	 * Skip if upstream is the same as main_branch (avoid redundant indicators)
 	 */
 	struct object_id upstream_oid;
@@ -877,9 +877,9 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 			has_upstream ? &upstream_oid : NULL, has_main_oid, has_upstream);
 
 	/*
-	 * Try cache first - check if we have cached divergence data
+	 * Try cache first - check if we have cached distance data
 	 */
-	struct divergence_data data = read_divergence_cache(&cache_key, debug_mode);
+	struct distance_data data = read_distance_cache(&cache_key, debug_mode);
 
 	if (!data.cached) {
 		/* Cache miss - compute with BFS */
@@ -891,46 +891,46 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 				fprintf(stderr, "[DEBUG] BFS: %s = %s\n", main_branch,
 					oid_to_hex(&main_oid));
 			}
-			/* Use bidirectional BFS to find divergence */
-			struct bfs_divergence_result main_result =
-				bfs_find_divergence(&ctx->oid, &main_oid, max_traversal, debug_mode);
+			/* Use bidirectional BFS to find distance */
+			struct bfs_distance_result main_result =
+				bfs_find_distance(&ctx->oid, &main_oid, max_traversal, debug_mode);
 			data.main_ahead = main_result.ahead;
 			data.main_behind = main_result.behind;
 			main_cost = main_result.commits_visited;
 			if (debug_mode) {
 				fprintf(stderr,
-					"[DEBUG] main divergence: ahead=%d, behind=%d, cost=%d\n",
+					"[DEBUG] main distance: ahead=%d, behind=%d, cost=%d\n",
 					data.main_ahead, data.main_behind, main_cost);
 			}
 		}
 
-		/* Only check upstream divergence if it's different from main */
+		/* Only check upstream distance if it's different from main */
 		if (has_upstream && !upstream_is_main) {
 			if (debug_mode) {
 				fprintf(stderr, "[DEBUG] BFS: upstream = %s = %s\n", upstream,
 					oid_to_hex(&upstream_oid));
 			}
-			/* Use bidirectional BFS to find divergence */
-			struct bfs_divergence_result upstream_result =
-				bfs_find_divergence(&ctx->oid, &upstream_oid, max_traversal, debug_mode);
+			/* Use bidirectional BFS to find distance */
+			struct bfs_distance_result upstream_result =
+				bfs_find_distance(&ctx->oid, &upstream_oid, max_traversal, debug_mode);
 			data.upstream_ahead = upstream_result.ahead;
 			data.upstream_behind = upstream_result.behind;
 			upstream_cost = upstream_result.commits_visited;
 			if (debug_mode) {
 				fprintf(stderr,
-					"[DEBUG] upstream divergence: ahead=%d, behind=%d, "
+					"[DEBUG] upstream distance: ahead=%d, behind=%d, "
 					"cost=%d\n",
 					data.upstream_ahead, data.upstream_behind, upstream_cost);
 			}
 		}
 
 		/* Write to cache */
-		write_divergence_cache(&cache_key, &data, main_cost + upstream_cost, debug_mode);
+		write_distance_cache(&cache_key, &data, main_cost + upstream_cost, debug_mode);
 	}
 
 	strbuf_release(&cache_key);
 
-	DEBUG_TIMER_END(divergence, "Divergence check");
+	DEBUG_TIMER_END(distance, "Distance check");
 
 	/*
 	 * Display strategy: Show two separate indicators
@@ -938,11 +938,11 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	 * 2. Relationship to upstream tracking branch
 	 */
 
-	/* Show main divergence when main_branch exists */
+	/* Show main distance when main_branch exists */
 	/* Skip if we already showed it as upstream indicator AND would be duplicate */
 	if (main_branch && (!has_upstream || !upstream_is_main)) {
 		if (data.main_ahead >= 0 && data.main_behind >= 0) {
-			/* Both values known - found merge-base, can show accurate divergence */
+			/* Both values known - found merge-base, can show accurate distance */
 			if (data.main_ahead > 0 && data.main_behind > 0) {
 				/* Diverged: both ahead and behind - never use parentheses */
 				strbuf_color_addf(indicators, COLOR_DIVERGED, "↑%d↓%d",
@@ -961,7 +961,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 		}
 	}
 
-	/* Show upstream == main divergence with appropriate formatting */
+	/* Show upstream == main distance with appropriate formatting */
 	if (has_upstream && upstream_is_main) {
 		/*
 		 * Use parentheses if main came from fallback (not from origin/HEAD symref).
@@ -1002,11 +1002,11 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 		}
 	}
 
-	/* Show upstream tracking divergence */
-	/* Skip if upstream == main_branch (we already showed main divergence above) */
+	/* Show upstream tracking distance */
+	/* Skip if upstream == main_branch (we already showed main distance above) */
 	if (has_upstream && !upstream_is_main) {
 		if (data.upstream_ahead >= 0 && data.upstream_behind >= 0) {
-			/* Both values known - found merge-base, can show accurate divergence */
+			/* Both values known - found merge-base, can show accurate distance */
 			if (data.upstream_ahead > 0 && data.upstream_behind > 0) {
 				/* Diverged from upstream - both ahead and behind */
 				strbuf_color_addf(indicators, COLOR_DIVERGED, "(↑%d↓%d)",
@@ -1071,7 +1071,7 @@ int main(int argc, const char **argv)
 			    "index size threshold for large repo detection (default: 5000000)"),
 		OPT_INTEGER(
 			0, "max-traversal", &max_traversal,
-			"maximum commits to traverse in divergence calculation (default: 1000)"),
+			"maximum commits to traverse in distance calculation (default: 1000)"),
 		OPT_BOOL(0, "local", &local_mode, "skip reading global git config"),
 		OPT_END()};
 	struct strbuf branch = STRBUF_INIT;
@@ -1178,7 +1178,7 @@ int main(int argc, const char **argv)
 	/* Section 3: Get misc indicators (detached, git state, stash) */
 	get_misc_indicators(&indicators, detached, &ctx, &state);
 
-	/* Section 2: Get tracking indicators (upstream, divergence from main) */
+	/* Section 2: Get tracking indicators (upstream, distance from main) */
 	get_tracking_indicators(&indicators, detached, &branch, &ctx);
 
 	/* Output the prompt */

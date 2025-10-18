@@ -1,5 +1,5 @@
 /*
- * graph-distance.c - Bidirectional BFS for commit divergence calculation
+ * graph-distance.c - Bidirectional BFS for commit distance calculation
  */
 #define USE_THE_REPOSITORY_VARIABLE
 
@@ -59,11 +59,11 @@ static struct bfs_distance_entry *get_or_create_entry(struct oidmap *distances,
 	return entry;
 }
 
-struct bfs_divergence_result bfs_find_divergence(const struct object_id *start,
-						 const struct object_id *target, int max_steps,
-						 int debug)
+struct bfs_distance_result bfs_find_distance(const struct object_id *start,
+					     const struct object_id *target, int max_steps,
+					     int debug)
 {
-	struct bfs_divergence_result result = {-1, -1, 0};
+	struct bfs_distance_result result = {-1, -1, 0};
 	struct oidmap distances;
 
 	/* Two BFS states: [0]=start side, [1]=target side (stack-allocated) */
