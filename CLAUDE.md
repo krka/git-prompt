@@ -10,7 +10,8 @@ This document helps Claude Code quickly understand the git-prompt project struct
 
 ```
 git-prompt/
-├── git-prompt.c           # Main source file (~1150 lines)
+├── src/
+│   └── git-prompt.c       # Main source file (~1150 lines)
 ├── submodules/git/        # Git source tree (submodule)
 ├── tests/
 │   ├── run_tests.py       # Python test runner
@@ -32,7 +33,7 @@ git-prompt/
 
 ## Key Architecture
 
-### Code Organization (git-prompt.c)
+### Code Organization (src/git-prompt.c)
 
 The code is organized into logical sections:
 
@@ -199,7 +200,7 @@ git prompt [options]
 
 ### Making Changes
 
-1. Edit `git-prompt.c`
+1. Edit `src/git-prompt.c`
 2. **Do NOT run `make` yourself** - let the user build
 3. Test changes: User will run `make && make test`
 
@@ -246,7 +247,7 @@ The `--local` flag was added specifically for testing to prevent global git conf
 
 ### Reading the Code
 
-When exploring git-prompt.c:
+When exploring src/git-prompt.c:
 1. Start with `main()` (line ~1200) to see the flow
 2. Understand the execution order:
    - Git state detection runs FIRST (to detect conflicts)
@@ -291,7 +292,7 @@ When `.git/index` size exceeds `large_repo_size` threshold (default 5MB), git-pr
 
 ### Function Performance Characteristics
 
-See code comments in git-prompt.c for detailed complexity analysis of each function. Key categories:
+See code comments in src/git-prompt.c for detailed complexity analysis of each function. Key categories:
 
 - **O(1) - Constant time**: Safe to call in large repo mode (config reads, state file checks)
 - **O(n) where n = index entries**: Scanning the index (can be expensive in large repos)

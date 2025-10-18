@@ -37,7 +37,7 @@ LIBS = -lpthread -lz -lrt
 GIT_CFLAGS = -I$(SUBMODULE_DIR)
 
 # Main source file
-SRC = git-prompt.c
+SRC = src/git-prompt.c
 
 # Core binaries (always built)
 EXECUTABLE = $(TARGET_DIR)/git-prompt                          # Patched, stripped, optimized (shipping)
