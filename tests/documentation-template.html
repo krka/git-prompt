@@ -283,6 +283,7 @@ end
             <li><strong>↑3</strong> - Divergence from the default main branch (e.g., <code>origin/main</code> or <code>origin/master</code>)</li>
         </ul>
         <p>You can see both at once: <code>[feature] <span class="ansi1">↑4↓3</span><span class="ansi4">(↑1)</span></code> means your feature branch is 4 commits ahead and 3 behind origin/main, plus 1 commit ahead of origin/feature.</p>
+        <p><strong>Note:</strong> Ahead/behind counts use a <strong>shortest path in graph</strong> definition, measuring the minimum number of commits between branches. This may differ from git's default calculation which can count commits differently depending on the operation.</p>
 
         <h3>Git Operation States</h3>
         <p>When a git operation is in progress, git-prompt shows the state and next action:</p>

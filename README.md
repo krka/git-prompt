@@ -129,6 +129,8 @@ The tool provides **two levels of tracking** to help you understand your branch 
 - `(↕)` - Too far diverged from upstream (exceeds --max-traversal limit)
 - _(nothing shown when in sync with upstream)_
 
+**Note**: Ahead/behind counts use a **shortest path in graph** definition, measuring the minimum number of commits between branches. This may differ from git's default calculation which can count commits differently depending on the operation.
+
 **Other Indicators**:
 - `○` - No upstream configured
 - `⚡` - Detached HEAD
