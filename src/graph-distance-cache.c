@@ -157,13 +157,20 @@ cleanup:
 struct cache_result read_distance_cache(const struct object_id *oid1,
 					const struct object_id *oid2, int debug)
 {
-	struct cache_result result = {0, -1, -1};
+	struct cache_result result;
 	const struct object_id *norm_oid1 = oid1;
 	const struct object_id *norm_oid2 = oid2;
 	struct strbuf cache_path = STRBUF_INIT;
 	FILE *fp;
 	int ahead, behind;
+	char ancestor_hex[GIT_MAX_HEXSZ + 1];
 	int swapped;
+
+	/* Initialize result */
+	result.found = 0;
+	result.ahead = -1;
+	result.behind = -1;
+	oidcpy(&result.ancestor, null_oid(the_repository->hash_algo));
 
 	/* Normalize the commit pair */
 	swapped = normalize_commit_pair(&norm_oid1, &norm_oid2);
@@ -188,6 +195,21 @@ struct cache_result read_distance_cache(const struct object_id *oid1,
 		}
 		fclose(fp);
 		goto cleanup;
+	}
+
+	/* Read ancestor OID if both ahead > 0 and behind > 0 (diverged case) */
+	if (ahead > 0 && behind > 0) {
+		if (fscanf(fp, "%40s", ancestor_hex) == 1) {
+			if (get_oid_hex(ancestor_hex, &result.ancestor) < 0) {
+				if (debug) {
+					fprintf(stderr, "[DEBUG] Cache: invalid ancestor OID in %s\n",
+						cache_path.buf);
+				}
+				fclose(fp);
+				goto cleanup;
+			}
+		}
+		/* If ancestor not present, keep as null_oid (already initialized) */
 	}
 	fclose(fp);
 
@@ -220,7 +242,7 @@ cleanup:
  * Creates cache directory if needed, and prunes old files when limit exceeded.
  */
 void write_distance_cache(const struct object_id *oid1, const struct object_id *oid2, int ahead,
-			  int behind, int total_cost, int debug)
+			  int behind, const struct object_id *ancestor, int total_cost, int debug)
 {
 	const struct object_id *norm_oid1 = oid1;
 	const struct object_id *norm_oid2 = oid2;
@@ -268,7 +290,11 @@ void write_distance_cache(const struct object_id *oid1, const struct object_id *
 		goto cleanup;
 	}
 
+	/* Write format: "ahead,behind\n" and optionally "ancestor_oid\n" if diverged */
 	fprintf(fp, "%d,%d\n", norm_ahead, norm_behind);
+	if (norm_ahead > 0 && norm_behind > 0) {
+		fprintf(fp, "%s\n", oid_to_hex(ancestor));
+	}
 	fclose(fp);
 
 	if (debug) {

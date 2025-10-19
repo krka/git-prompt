@@ -8,9 +8,10 @@
  * Result of bidirectional BFS distance calculation.
  */
 struct bfs_distance_result {
-	int ahead;	     /* Commits in start but not in target (-1 if not found) */
-	int behind;	     /* Commits in target but not in start (-1 if not found) */
-	int commits_visited; /* Number of commits traversed (traversal cost) */
+	int ahead;		 /* Commits in start but not in target (-1 if not found) */
+	int behind;		 /* Commits in target but not in start (-1 if not found) */
+	int commits_visited;	 /* Number of commits traversed (traversal cost) */
+	struct object_id ancestor; /* Common ancestor (merge-base) commit */
 };
 
 /*
@@ -35,8 +36,8 @@ struct bfs_distance_result {
  *   debug     - Enable debug output to stderr
  *
  * Returns:
- *   - {ahead, behind} if relationship found within max_steps (both >= 0)
- *   - {-1, -1} if too far apart (no common ancestor within max_steps)
+ *   - {ahead, behind, ancestor} if relationship found within max_steps (both >= 0)
+ *   - {-1, -1, null_oid} if too far apart (no common ancestor within max_steps)
  */
 struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 					     const struct object_id *target, int max_steps,

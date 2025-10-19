@@ -8,12 +8,13 @@
  * Result of cache lookup for a commit pair.
  * Cache directory: .git/distance-cache/
  * Cache filename: <oid1>-<oid2> (alphabetically sorted)
- * Cache contents: "ahead,behind" (normalized based on sorted order)
+ * Cache contents: "ahead,behind\nancestor_oid\n" (ancestor only if both ahead > 0 and behind > 0)
  */
 struct cache_result {
-	int found;  /* 1 if cached, 0 if cache miss */
-	int ahead;  /* Commits in oid1 but not in oid2 */
-	int behind; /* Commits in oid2 but not in oid1 */
+	int found;		   /* 1 if cached, 0 if cache miss */
+	int ahead;		   /* Commits in oid1 but not in oid2 */
+	int behind;		   /* Commits in oid2 but not in oid1 */
+	struct object_id ancestor; /* Common ancestor (merge-base) commit */
 };
 
 /*
@@ -30,7 +31,7 @@ struct cache_result {
  *   oid2  - Second commit OID
  *   debug - Enable debug output to stderr
  *
- * Returns: {found=1, ahead, behind} if cached, {found=0, -1, -1} if miss
+ * Returns: {found=1, ahead, behind, ancestor} if cached, {found=0, -1, -1, null_oid} if miss
  */
 struct cache_result read_distance_cache(const struct object_id *oid1,
 					const struct object_id *oid2, int debug);
@@ -53,10 +54,12 @@ struct cache_result read_distance_cache(const struct object_id *oid1,
  *   oid2       - Second commit OID
  *   ahead      - Commits in oid1 but not in oid2
  *   behind     - Commits in oid2 but not in oid1
+ *   ancestor   - Common ancestor (merge-base) commit OID
  *   total_cost - Number of commits visited by BFS
  *   debug      - Enable debug output to stderr
  */
 void write_distance_cache(const struct object_id *oid1, const struct object_id *oid2,
-			  int ahead, int behind, int total_cost, int debug);
+			  int ahead, int behind, const struct object_id *ancestor,
+			  int total_cost, int debug);
 
 #endif /* GRAPH_DISTANCE_CACHE_H */

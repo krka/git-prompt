@@ -1139,8 +1139,12 @@ int main(int argc, const char **argv)
 		/* Calculate distance */
 		struct bfs_distance_result result = bfs_find_distance(&from_oid, &to_oid, max_traversal, debug_mode);
 
-		/* Output in machine-readable format */
-		printf("%d,%d\n", result.ahead, result.behind);
+		/* Output in machine-readable format: "ahead,behind" or "ahead,behind:ancestor" if diverged */
+		if (result.ahead > 0 && result.behind > 0) {
+			printf("%d,%d:%s\n", result.ahead, result.behind, oid_to_hex(&result.ancestor));
+		} else {
+			printf("%d,%d\n", result.ahead, result.behind);
+		}
 
 		return 0;
 	}

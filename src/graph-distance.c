@@ -64,8 +64,14 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 					     const struct object_id *target, int max_steps,
 					     int debug)
 {
-	struct bfs_distance_result result = {-1, -1, 0};
+	struct bfs_distance_result result;
 	struct oidmap distances;
+
+	/* Initialize result with null values */
+	result.ahead = -1;
+	result.behind = -1;
+	result.commits_visited = 0;
+	oidcpy(&result.ancestor, null_oid(the_repository->hash_algo));
 
 	/* Two BFS states: [0]=start side, [1]=target side (stack-allocated) */
 	struct bfs_state states[2] = {
@@ -81,6 +87,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 		result.ahead = 0;
 		result.behind = 0;
 		result.commits_visited = 0;
+		oidcpy(&result.ancestor, start); /* When same, ancestor is the commit itself */
 		return result;
 	}
 
@@ -90,6 +97,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 		result.ahead = cached.ahead;
 		result.behind = cached.behind;
 		result.commits_visited = 0; /* Cache hit - no traversal needed */
+		oidcpy(&result.ancestor, &cached.ancestor);
 		return result;
 	}
 
@@ -152,6 +160,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 				result.ahead = current_entry->dist_from_start;
 				result.behind = current_entry->dist_from_target;
 				result.commits_visited = commits_visited;
+				oidcpy(&result.ancestor, &current.oid);
 				if (debug) {
 					fprintf(stderr,
 						"[DEBUG] BFS: found intersection after %d commits, "
@@ -199,6 +208,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 							result.behind =
 								parent_entry->dist_from_target;
 							result.commits_visited = commits_visited;
+							oidcpy(&result.ancestor, parent_oid);
 							if (debug) {
 								fprintf(stderr,
 									"[DEBUG] BFS: found "
@@ -249,7 +259,7 @@ cleanup:
 
 	/* Write result to cache (write function decides if expensive enough) */
 	write_distance_cache(start, target, result.ahead, result.behind,
-			     commits_visited, debug);
+			     &result.ancestor, commits_visited, debug);
 
 	/* Free hashmap entries */
 	struct oidmap_iter iter;
