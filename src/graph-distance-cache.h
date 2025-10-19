@@ -11,10 +11,10 @@
  * Cache contents: "ahead,behind\nancestor_oid\n" (ancestor only if both ahead > 0 and behind > 0)
  */
 struct cache_result {
-	int found;		   /* 1 if cached, 0 if cache miss */
-	int ahead;		   /* Commits in oid1 but not in oid2 */
-	int behind;		   /* Commits in oid2 but not in oid1 */
-	struct object_id ancestor; /* Common ancestor (merge-base) commit */
+  int found;                 /* 1 if cached, 0 if cache miss */
+  int ahead;                 /* Commits in oid1 but not in oid2 */
+  int behind;                /* Commits in oid2 but not in oid1 */
+  struct object_id ancestor; /* Common ancestor (merge-base) commit */
 };
 
 /*
@@ -33,8 +33,8 @@ struct cache_result {
  *
  * Returns: {found=1, ahead, behind, ancestor} if cached, {found=0, -1, -1, null_oid} if miss
  */
-struct cache_result read_distance_cache(const struct object_id *oid1,
-					const struct object_id *oid2, int debug);
+struct cache_result read_distance_cache(const struct object_id *oid1, const struct object_id *oid2,
+                                        int debug);
 
 /*
  * Write distance between two commits to cache
@@ -58,8 +58,7 @@ struct cache_result read_distance_cache(const struct object_id *oid1,
  *   total_cost - Number of commits visited by BFS
  *   debug      - Enable debug output to stderr
  */
-void write_distance_cache(const struct object_id *oid1, const struct object_id *oid2,
-			  int ahead, int behind, const struct object_id *ancestor,
-			  int total_cost, int debug);
+void write_distance_cache(const struct object_id *oid1, const struct object_id *oid2, int ahead,
+                          int behind, const struct object_id *ancestor, int total_cost, int debug);
 
 #endif /* GRAPH_DISTANCE_CACHE_H */
