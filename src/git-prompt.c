@@ -30,7 +30,6 @@
 #include "remote.h"
 #include "hex.h"
 #include "graph-distance.h"
-#include "graph-distance-cache.h"
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -77,9 +76,7 @@
  * - check_git_state_file()       O(1)*     - File access() syscall (*O(n) if checking conflicts)
  * - get_misc_indicators()        O(1)      - Flag checks and ref existence
  * - get_tracking_indicators()    O(commits)- Graph traversal (limited by max_traversal)
- * - bfs_find_distance()          O(commits)- BFS limited by max_traversal parameter
- * - read_distance_cache()        O(1)      - Single file read
- * - write_distance_cache()       O(1)      - Single file write
+ * - bfs_find_distance()          O(commits)- BFS limited by max_traversal, with internal caching
  *
  * UNSAFE FOR LARGE REPO MODE (expensive, currently skipped):
  * ----------------------------------------------------------
@@ -720,6 +717,7 @@ static int get_branch_name_and_color(struct strbuf *branch, const char **color,
  * Phase 2: Check distance from upstream tracking branch (what you pushed)
  *
  * Performance: O(commits) where commits ≤ 2 * max_traversal (default 2000)
+ *              BFS results are automatically cached internally by graph-distance module
  *              Fast path: cache hit is O(1) (file read + parse)
  *              Slow path: BFS traversal limited by max_traversal
  * Safe for large repo mode: Yes (graph operations, independent of worktree/index)
@@ -882,69 +880,46 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	}
 
 	/*
-	 * Compute or retrieve cached distances.
-	 * Each commit pair is cached separately for better reusability.
+	 * Compute distances using BFS (automatically cached internally).
 	 */
 	int main_ahead = -1, main_behind = -1;
 	int upstream_ahead = -1, upstream_behind = -1;
 
-	/* Try to get main distance from cache or compute it */
+	/* Compute main distance */
 	if (has_main_oid) {
-		struct cache_result cached = read_distance_cache(&ctx->oid, &main_oid, debug_mode);
-		if (cached.found) {
-			main_ahead = cached.ahead;
-			main_behind = cached.behind;
-		} else {
-			/* Cache miss - compute with BFS */
-			if (debug_mode) {
-				fprintf(stderr, "[DEBUG] BFS: HEAD = %s\n", oid_to_hex(&ctx->oid));
-				fprintf(stderr, "[DEBUG] BFS: %s = %s\n", main_branch,
-					oid_to_hex(&main_oid));
-			}
-			struct bfs_distance_result main_result =
-				bfs_find_distance(&ctx->oid, &main_oid, max_traversal, debug_mode);
-			main_ahead = main_result.ahead;
-			main_behind = main_result.behind;
-			if (debug_mode) {
-				fprintf(stderr,
-					"[DEBUG] main distance: ahead=%d, behind=%d, cost=%d\n",
-					main_ahead, main_behind, main_result.commits_visited);
-			}
-			/* Write to cache */
-			write_distance_cache(&ctx->oid, &main_oid, main_ahead, main_behind,
-					     main_result.commits_visited, debug_mode);
+		if (debug_mode) {
+			fprintf(stderr, "[DEBUG] BFS: HEAD = %s\n", oid_to_hex(&ctx->oid));
+			fprintf(stderr, "[DEBUG] BFS: %s = %s\n", main_branch,
+				oid_to_hex(&main_oid));
+		}
+		struct bfs_distance_result main_result =
+			bfs_find_distance(&ctx->oid, &main_oid, max_traversal, debug_mode);
+		main_ahead = main_result.ahead;
+		main_behind = main_result.behind;
+		if (debug_mode) {
+			fprintf(stderr,
+				"[DEBUG] main distance: ahead=%d, behind=%d, cost=%d\n",
+				main_ahead, main_behind, main_result.commits_visited);
 		}
 	}
 
-	/* Try to get upstream distance from cache or compute it (if different from main) */
+	/* Compute upstream distance (if different from main) */
 	if (has_upstream && !upstream_is_main) {
-		struct cache_result cached =
-			read_distance_cache(&ctx->oid, &upstream_oid, debug_mode);
-		if (cached.found) {
-			upstream_ahead = cached.ahead;
-			upstream_behind = cached.behind;
-		} else {
-			/* Cache miss - compute with BFS */
-			if (debug_mode) {
-				fprintf(stderr, "[DEBUG] BFS: upstream = %s = %s\n", upstream,
-					oid_to_hex(&upstream_oid));
-			}
-			struct bfs_distance_result upstream_result =
-				bfs_find_distance(&ctx->oid, &upstream_oid, max_traversal,
-						  debug_mode);
-			upstream_ahead = upstream_result.ahead;
-			upstream_behind = upstream_result.behind;
-			if (debug_mode) {
-				fprintf(stderr,
-					"[DEBUG] upstream distance: ahead=%d, behind=%d, "
-					"cost=%d\n",
-					upstream_ahead, upstream_behind,
-					upstream_result.commits_visited);
-			}
-			/* Write to cache */
-			write_distance_cache(&ctx->oid, &upstream_oid, upstream_ahead,
-					     upstream_behind, upstream_result.commits_visited,
-					     debug_mode);
+		if (debug_mode) {
+			fprintf(stderr, "[DEBUG] BFS: upstream = %s = %s\n", upstream,
+				oid_to_hex(&upstream_oid));
+		}
+		struct bfs_distance_result upstream_result =
+			bfs_find_distance(&ctx->oid, &upstream_oid, max_traversal,
+					  debug_mode);
+		upstream_ahead = upstream_result.ahead;
+		upstream_behind = upstream_result.behind;
+		if (debug_mode) {
+			fprintf(stderr,
+				"[DEBUG] upstream distance: ahead=%d, behind=%d, "
+				"cost=%d\n",
+				upstream_ahead, upstream_behind,
+				upstream_result.commits_visited);
 		}
 	}
 

@@ -4,6 +4,7 @@
 #define USE_THE_REPOSITORY_VARIABLE
 
 #include "graph-distance.h"
+#include "graph-distance-cache.h"
 #include "commit.h"
 #include "oidmap.h"
 #include "hex.h"
@@ -80,6 +81,15 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 		result.ahead = 0;
 		result.behind = 0;
 		result.commits_visited = 0;
+		return result;
+	}
+
+	/* Try to get result from cache first */
+	struct cache_result cached = read_distance_cache(start, target, debug);
+	if (cached.found) {
+		result.ahead = cached.ahead;
+		result.behind = cached.behind;
+		result.commits_visited = 0; /* Cache hit - no traversal needed */
 		return result;
 	}
 
@@ -236,6 +246,10 @@ cleanup:
 			"steps left: %d)\n",
 			commits_visited, states[0].steps_remaining, states[1].steps_remaining);
 	}
+
+	/* Write result to cache (write function decides if expensive enough) */
+	write_distance_cache(start, target, result.ahead, result.behind,
+			     commits_visited, debug);
 
 	/* Free hashmap entries */
 	struct oidmap_iter iter;
