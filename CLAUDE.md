@@ -15,7 +15,10 @@ git-prompt/
 ├── submodules/git/        # Git source tree (submodule)
 ├── tests/
 │   ├── run_tests.py       # Python test runner
-│   ├── test_cases.yaml    # Declarative test cases
+│   ├── test-core.yaml     # Core git states tests
+│   ├── test-upstream.yaml # Upstream tracking tests
+│   ├── test-operations.yaml # In-progress operations tests
+│   ├── test-bisect.yaml   # Git bisect tests
 │   ├── test-results.txt   # Generated text report
 │   ├── test-results.html  # Generated detailed HTML report
 │   └── examples.html      # Generated summary HTML report
@@ -131,7 +134,7 @@ The `release/` directory contains the **last known good build** that always work
 
 ### Test System
 
-Tests are defined declaratively in `tests/test_cases.yaml` and executed by `tests/run_tests.py`.
+Tests are defined declaratively in `tests/test-*.yaml` files and executed by `tests/run_tests.py`.
 
 #### Test Structure
 
@@ -169,11 +172,13 @@ The test runner:
 
 #### Test Suites
 
-The project uses multiple test suites:
-- `test-cases.yaml` - Core functionality tests (basic states, branches, upstream tracking, etc.)
-- `test-bisect.yaml` - Git bisect functionality tests
+The project uses focused test suites organized by functionality:
+- `test-core.yaml` - Basic git states, working tree, branches, detached HEAD, stash (21 tests)
+- `test-upstream.yaml` - Upstream tracking, ahead/behind indicators, divergence (11 tests)
+- `test-operations.yaml` - In-progress operations (merge, rebase, etc.), git am, worktrees (9 tests)
+- `test-bisect.yaml` - Git bisect functionality (2 tests)
 
-When multiple suites are present, the test runner generates unified reports with sections for each suite.
+The test runner generates unified reports with sections for each suite.
 
 #### Test Reports
 
@@ -216,7 +221,11 @@ git prompt [options]
 
 ### Adding Tests
 
-1. Edit `tests/test_cases.yaml`
+1. Edit the appropriate `tests/test-*.yaml` file based on functionality:
+   - `test-core.yaml` for basic git states, working tree, branches
+   - `test-upstream.yaml` for upstream tracking and divergence
+   - `test-operations.yaml` for in-progress operations
+   - `test-bisect.yaml` for bisect functionality
 2. Add test case with appropriate `group` and `expected` output
 3. Use `reset: true` if test needs clean git repo
 4. Tests automatically use `--local` flag

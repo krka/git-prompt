@@ -195,7 +195,7 @@ cd tests
 python3 run_tests.py
 ```
 
-This runs all test cases from multiple test suites (`test-cases.yaml`, `test-bisect.yaml`) and automatically generates:
+This runs all test cases from multiple focused test suites (`test-core.yaml`, `test-upstream.yaml`, `test-operations.yaml`, `test-bisect.yaml`) and automatically generates:
 - Pass/fail results for each test case
 - Unified reports in tests/ directory combining all suites:
   - `examples.html` - Visual examples grouped by category
@@ -234,7 +234,7 @@ Benefits:
 - `submodules/git/` - Git source code (submodule)
 - `tests/` - Test suite
   - `run_tests.py` - Python test runner
-  - `test_cases.yaml` - Declarative test cases
+  - `test-*.yaml` - Focused test suites (core, upstream, operations, bisect)
   - `*.html`, `*.txt` - Generated test reports (git-ignored)
 - `README.md` - This file
 
