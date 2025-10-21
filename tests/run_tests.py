@@ -268,9 +268,23 @@ def generate_unified_detailed_report(suites_results, output_path):
             display: flex;
             align-items: center;
             gap: 15px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .suite-header:hover {
+            background-color: #3d3d40;
         }
         .suite-header.failed {
             border-left-color: #cc6666;
+        }
+        .suite-expand-icon {
+            color: #858585;
+            font-size: 1.1em;
+            transition: transform 0.2s;
+            margin-right: 8px;
+        }
+        .suite-section.expanded .suite-expand-icon {
+            transform: rotate(90deg);
         }
         .suite-name {
             font-size: 1.3em;
@@ -281,6 +295,12 @@ def generate_unified_detailed_report(suites_results, output_path):
         .suite-stats {
             color: #d4d4d4;
             font-size: 0.95em;
+        }
+        .suite-content {
+            display: none;
+        }
+        .suite-section.expanded .suite-content {
+            display: block;
         }
         .summary {
             background-color: #252526;
@@ -435,6 +455,10 @@ def generate_unified_detailed_report(suites_results, output_path):
         }
     </style>
     <script>
+        function toggleSuite(element) {
+            element.closest('.suite-section').classList.toggle('expanded');
+        }
+
         function toggleTest(element) {
             element.closest('.test-case').classList.toggle('expanded');
         }
@@ -443,10 +467,15 @@ def generate_unified_detailed_report(suites_results, output_path):
             element.closest('.steps-section').classList.toggle('expanded');
         }
 
-        // Expand all failed tests by default
+        // Expand all failed tests by default and failed suites
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.test-case.failed').forEach(function(testCase) {
                 testCase.classList.add('expanded');
+            });
+
+            // Expand suites that have failed tests
+            document.querySelectorAll('.suite-header.failed').forEach(function(header) {
+                header.closest('.suite-section').classList.add('expanded');
             });
         });
     </script>
@@ -485,10 +514,12 @@ def generate_unified_detailed_report(suites_results, output_path):
 
         html += f"""
     <div class="suite-section">
-        <div class="{suite_header_class}">
+        <div class="{suite_header_class}" onclick="toggleSuite(this)">
+            <span class="suite-expand-icon">▶</span>
             <div class="suite-name">{html_escape.escape(suite_name)}</div>
             <div class="suite-stats">{suite_passed}/{suite_total} passed ({suite_pass_rate:.1f}%)</div>
         </div>
+        <div class="suite-content">
 """
 
         # Add each test case in this suite
@@ -588,8 +619,9 @@ def generate_unified_detailed_report(suites_results, output_path):
     </div>
 """
 
-        # Close suite section
-        html += """    </div>
+        # Close suite content and suite section
+        html += """        </div>
+    </div>
 """
 
     # Footer
