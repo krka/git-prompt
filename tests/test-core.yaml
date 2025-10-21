@@ -1,0 +1,190 @@
+name: Core Git States
+tests:
+- description: No git repository present
+  name: No git repository
+  group: basic
+  steps: []
+  expected: ''
+- description: Fresh git repository
+  name: Fresh git init
+  group: basic
+  steps:
+  - git init
+  - git config user.name "Test User"
+  - git config user.email "test@example.com"
+  expected: ''
+- description: Untracked file in repository
+  name: Untracked file added
+  group: basic
+  steps:
+  - touch file1.txt
+  expected: ''
+- description: File staged for commit
+  name: File staged
+  group: basic
+  steps:
+  - git add file1.txt
+  expected: ''
+- description: Initial commit
+  name: First commit made
+  group: basic
+  steps:
+  - git commit -m "Initial commit"
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file not staged
+  name: File modified (unstaged)
+  group: working-tree
+  steps:
+  - echo "content" > file1.txt
+  expected: '{RED}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file staged for commit
+  name: File modified (staged)
+  group: working-tree
+  steps:
+  - git add file1.txt
+  expected: '{YELLOW}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Second commit on branch
+  name: Second commit
+  group: basic
+  steps:
+  - git commit -m "Update file1"
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Creating feature branch
+  name: Create feature branch
+  group: branches
+  steps:
+  - git checkout -b feature
+  expected: '{GREEN}[feature]{}'
+  expected_large: '{GRAY}[feature]{}'
+- description: Commit on feature branch
+  name: Commit on feature branch
+  group: branches
+  steps:
+  - touch feature.txt
+  - git add feature.txt
+  - git commit -m "Add feature"
+  expected: '{GREEN}[feature]{}'
+  expected_large: '{GRAY}[feature]{}'
+- description: Detached HEAD state
+  name: Detached HEAD
+  group: detached
+  example: true
+  steps:
+  - git checkout HEAD~1
+  expected: '{GREEN}[842fbac]{} ⚡'
+  expected_large: '{GRAY}[842fbac]{} ⚡'
+- description: Returning to feature branch
+  name: Back to feature branch
+  group: branches
+  steps:
+  - git checkout feature
+  expected: '{GREEN}[feature]{}'
+  expected_large: '{GRAY}[feature]{}'
+- description: Creating stash
+  name: Create stash
+  group: stash
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test User"
+  - git config user.email "test@example.com"
+  - touch file.txt
+  - git add file.txt
+  - git commit -m "Initial"
+  - echo "change" > file.txt
+  - git stash
+  expected: '{GREEN}[master]{} 💾'
+  expected_large: '{GRAY}[master]{} 💾'
+- description: Clean state after stash drop
+  name: Clean after stash
+  group: stash
+  steps:
+  - git stash drop
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Clean working tree
+  name: Clean working tree
+  group: working-tree
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file1.txt
+  - git add file1.txt
+  - git commit -m "Initial"
+  expected: '{GREEN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file unstaged
+  name: Modified file unstaged
+  group: working-tree
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file1.txt
+  - git add file1.txt
+  - git commit -m "Initial"
+  - echo "modified" > file1.txt
+  expected: '{RED}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Modified file staged
+  name: Modified file staged
+  group: working-tree
+  example: true
+  steps:
+  - git add file1.txt
+  expected: '{YELLOW}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Only untracked files present
+  name: Untracked files only
+  group: working-tree
+  example: true
+  steps:
+  - git reset --hard
+  - touch untracked.txt
+  expected: '{CYAN}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: New file staged
+  name: New file staged
+  group: working-tree
+  steps:
+  - git add untracked.txt
+  expected: '{YELLOW}[master]{}'
+  expected_large: '{GRAY}[master]{}'
+- description: Large repository detection
+  name: Large repository (gray)
+  group: working-tree
+  reset: true
+  large_repo_size: 100
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "content" > file1.txt
+  - git add file1.txt
+  - git commit -m "Initial"
+  expected: '{GRAY}[master]{}'
+- description: Detached HEAD on tag
+  name: Detached HEAD on tag
+  group: detached
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "v1" > file.txt
+  - git add file.txt
+  - git commit -m "Version 1"
+  - git tag v1.0
+  - git checkout v1.0
+  expected: '{GREEN}[23e6adf]{} ⚡'
+  expected_large: '{GRAY}[23e6adf]{} ⚡'
