@@ -155,15 +155,25 @@ This shows as "Repeated 100 times:" in reports instead of 100 individual lines.
 
 ```bash
 cd tests
-./run_tests.py                # Auto-discovers all binaries, always generates reports
+./run_tests.py                # Auto-discovers all test suites and binaries, generates unified reports
 ./run_tests.py --verbose      # Show detailed output
 ```
 
 The test runner:
+- Auto-discovers all test suites (`test-*.yaml` files) from tests/ directory
 - Auto-discovers all five binaries from `../target/` directory (relative to tests/)
+- When multiple test suites exist, generates unified reports combining all results
 - Always generates HTML and text reports in tests/ directory
 
 **IMPORTANT**: Tests always use `--local` flag (hardcoded in `get_git_prompt_output()`) to avoid global git config interference.
+
+#### Test Suites
+
+The project uses multiple test suites:
+- `test-cases.yaml` - Core functionality tests (basic states, branches, upstream tracking, etc.)
+- `test-bisect.yaml` - Git bisect functionality tests
+
+When multiple suites are present, the test runner generates unified reports with sections for each suite.
 
 #### Test Reports
 
@@ -171,9 +181,9 @@ The test runner generates three types of reports:
 
 1. **Text Report** (`test-results.txt`): Plain text format with escaped color markers like `{GREEN}[master]{}`. Shows both expected patterns and actual output for all tests. Repeated commands are shown compactly as "Repeated N times:".
 
-2. **Detailed HTML Report** (`test-results.html`): Interactive HTML with collapsible sections showing all setup steps and results for each test. Failed tests are expanded by default.
+2. **Detailed HTML Report** (`test-results.html`): Interactive HTML with collapsible sections. When multiple test suites exist, shows suite headers with stats, then all tests organized by suite. Failed tests are expanded by default.
 
-3. **Summary HTML Report** (`examples.html`): Grouped examples of git-prompt output by category (basic, working-tree, branches, etc.).
+3. **Summary HTML Report** (`examples.html`): Grouped examples of git-prompt output by category (basic, working-tree, branches, upstream, stash, in-progress, bisect, etc.).
 
 ### Test Pattern Variables
 

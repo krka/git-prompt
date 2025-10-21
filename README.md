@@ -136,6 +136,7 @@ The tool provides **two levels of tracking** to help you understand your branch 
 - `⚡` - Detached HEAD
 - `[state]` - Git operation in progress (merge, rebase, cherry-pick, revert)
   - Red when conflicts present, cyan otherwise
+- `[bisect (G/B)]` - Git bisect in progress (shows good/bad commit counts)
 - `💾` - Stashed changes present
 
 ### Examples
@@ -150,6 +151,7 @@ The tool provides **two levels of tracking** to help you understand your branch 
 [feature] ↑5(↓1)        # Feature: 5 ahead of main, 1 commit behind upstream (need to pull)
 [main] ⚡               # Detached HEAD on main
 [main] [merge:conflict] # Merge in progress with conflicts (red)
+[5bc0037] ⚡[bisect (1/1)] # Git bisect in progress (1 good/1 bad commit)
 [feature] 💾            # Feature branch with stashed changes
 ```
 
@@ -193,11 +195,11 @@ cd tests
 python3 run_tests.py
 ```
 
-This runs all test cases from `test_cases.yaml` and automatically generates:
+This runs all test cases from multiple test suites (`test-cases.yaml`, `test-bisect.yaml`) and automatically generates:
 - Pass/fail results for each test case
-- Three reports in tests/ directory:
+- Unified reports in tests/ directory combining all suites:
   - `examples.html` - Visual examples grouped by category
-  - `test-results.html` - Detailed results with all test steps
+  - `test-results.html` - Detailed results with all test steps, organized by suite
   - `test-results.txt` - Plain text report
 
 Use `--verbose` to see detailed output and `--replace-expected` to update test expectations after behavior changes.
