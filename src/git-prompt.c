@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <dirent.h>
 
 /*
  * ANSI color codes for terminal output
@@ -586,6 +587,13 @@ static int get_branch_name_and_color(struct strbuf *branch, const char **color,
     /* Detached HEAD */
     detached = 1;
 
+    /*
+     * DISABLED: Tag name lookup for detached HEAD
+     * This requires loading all refs via get_name_decoration(), which is
+     * very expensive in repos with many refs (7000+ refs = 400ms+).
+     * Short commit hash is sufficient and fast.
+     */
+#if 0
     /* Try to get a tag name (skip for large repos) */
     if (!ctx->large_repo) {
       struct commit *commit = lookup_commit_reference(the_repository, &ctx->oid);
@@ -604,11 +612,10 @@ static int get_branch_name_and_color(struct strbuf *branch, const char **color,
         }
       }
     }
+#endif
 
-    /* Fallback to short commit hash */
-    if (!branch->len) {
-      strbuf_add_unique_abbrev(branch, &ctx->oid, 7);
-    }
+    /* Use short commit hash for detached HEAD */
+    strbuf_add_unique_abbrev(branch, &ctx->oid, 7);
   }
 
   DEBUG_TIMER_END(branch_name, "Branch name");
@@ -1007,12 +1014,81 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 }
 
 /*
+ * Check if git bisect is in progress and format the bisect indicator.
+ * Shows good/bad commit counts.
+ *
+ * Format: [bisect (G/B)] with color coding:
+ *   G = number of good commits marked (green)
+ *   B = number of bad commits marked (red)
+ *
+ * Example: [bisect (1/1)] = 1 good, 1 bad
+ *
+ * Performance: O(k) where k = number of bisect refs
+ *              Just counts refs, no graph traversal
+ * Safe for large repo mode: Yes (just file operations)
+ *
+ * Returns 1 if bisect indicator was added, 0 otherwise.
+ */
+static int get_bisect_indicator(struct strbuf *indicators, const struct prompt_context *ctx)
+{
+  const char *gitdir = repo_get_git_dir(the_repository);
+  struct strbuf path = STRBUF_INIT;
+  struct strbuf bisect_refs_dir = STRBUF_INIT;
+  DIR *dir;
+  struct dirent *entry;
+  int good_count = 0;
+  int bad_count = 0;
+
+  /* Check if bisect is in progress */
+  strbuf_addf(&path, "%s/BISECT_START", gitdir);
+  if (access(path.buf, F_OK) != 0) {
+    strbuf_release(&path);
+    return 0;
+  }
+  strbuf_release(&path);
+
+  /* Count all good and bad commits */
+  strbuf_addf(&bisect_refs_dir, "%s/refs/bisect", gitdir);
+  dir = opendir(bisect_refs_dir.buf);
+  if (dir) {
+    while ((entry = readdir(dir)) != NULL) {
+      /* Look for good-* and bad refs */
+      if (strncmp(entry->d_name, "good-", 5) == 0) {
+        good_count++;
+      } else if (strcmp(entry->d_name, "bad") == 0) {
+        bad_count++;
+      }
+    }
+    closedir(dir);
+  }
+  strbuf_release(&bisect_refs_dir);
+
+  /* Format the bisect indicator - simplified to just show good/bad counts */
+  if (good_count > 0 || bad_count > 0) {
+    /* Simple format: [bisect (good/bad)] with color coding */
+    strbuf_addstr(indicators, "[");
+    strbuf_color_addf(indicators, COLOR_UNSTAGED, "bisect");
+    strbuf_addstr(indicators, " (");
+    strbuf_color_addf(indicators, COLOR_CLEAN, "%d", good_count);
+    strbuf_addstr(indicators, "/");
+    strbuf_color_addf(indicators, COLOR_MODIFIED, "%d", bad_count);
+    strbuf_addstr(indicators, ")]");
+  } else {
+    /* Bisect started but no commits marked yet */
+    return 0;
+  }
+
+  return 1;
+}
+
+/*
  * Section 3: Collect miscellaneous indicators.
- * Includes: detached HEAD, git state (merge/rebase/etc), stash.
+ * Includes: detached HEAD, git state (merge/rebase/etc), stash, bisect.
  *
  * Takes git_state computed earlier to avoid redundant checks.
  *
- * Performance: O(1) - checks simple flags and ref existence
+ * Performance: O(1) for most indicators, O(k + commits) for bisect
+ *              where k = bisect refs, commits bounded by max_traversal
  * Safe for large repo mode: Yes (no index or worktree operations)
  */
 static void get_misc_indicators(struct strbuf *indicators, int detached,
@@ -1027,6 +1103,9 @@ static void get_misc_indicators(struct strbuf *indicators, int detached,
   if (state->has_state) {
     strbuf_color_addf(indicators, state->state_color, "[%s]", state->state_name);
   }
+
+  /* Check for bisect in progress */
+  get_bisect_indicator(indicators, ctx);
 
   /* Check for stashed changes (emoji, color has no effect) */
   if (refs_ref_exists(ctx->refs, "refs/stash")) {

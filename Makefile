@@ -360,11 +360,19 @@ distclean: clean
 	fi
 
 # Install to /usr/local/bin (or PREFIX if set)
+# Automatically builds binary and uses sudo only for the copy step if needed
 PREFIX ?= /usr/local
 .PHONY: install
 install: $(EXECUTABLE)
-	install -d $(PREFIX)/bin
-	install -m 755 $(EXECUTABLE) $(PREFIX)/bin/
+	@if [ ! -w $(PREFIX)/bin ] && [ ! -w $(PREFIX) ]; then \
+		echo "Installing to $(PREFIX)/bin (requires sudo)..."; \
+		sudo install -d $(PREFIX)/bin; \
+		sudo install -m 755 $(EXECUTABLE) $(PREFIX)/bin/; \
+	else \
+		install -d $(PREFIX)/bin; \
+		install -m 755 $(EXECUTABLE) $(PREFIX)/bin/; \
+	fi
+	@echo "✓ Installed to $(PREFIX)/bin/git-prompt"
 
 # Install to user's local bin directory (no sudo required)
 .PHONY: install-local

@@ -860,7 +860,9 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
         for i, test in enumerate(tests, 1):
             name = test.get('name', f'Test {i}')
             steps = test.get('steps', [])
-            expected = test.get('expected', '')
+            # Check if test has inline expect steps - if so, final expected is optional
+            has_inline_expects = any(isinstance(s, dict) and 'expect' in s for s in steps)
+            expected = test.get('expected', '' if not has_inline_expects else None)
             expected_large = test.get('expected_large', None)
             reset = test.get('reset', False)
             is_example = test.get('example', False)
@@ -877,8 +879,92 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                     shutil.rmtree(test_dir)
                 os.makedirs(test_dir)
 
-            # Execute setup steps
+            # Get max_traversal from test (for tests that override it)
+            max_traversal = test.get('max_traversal', None)
+
+            # Track inline expect failures
+            inline_expect_results = []
+
+            # Execute setup steps and inline expect checks
             for step_item in steps:
+                # Check if this is an inline expect verification
+                if isinstance(step_item, dict) and 'expect' in step_item:
+                    # This is an inline expect step
+                    expect_spec = step_item['expect']
+
+                    # Parse expect format: either simple string or dict with small/large
+                    if isinstance(expect_spec, str):
+                        # Simple format: expect: "pattern"
+                        expect_small = expect_spec
+                        expect_large = None
+                    elif isinstance(expect_spec, dict):
+                        # Dict format: expect: {small: "pattern", large: "pattern"}
+                        expect_small = expect_spec.get('small', '')
+                        expect_large = expect_spec.get('large', None)
+                    else:
+                        print(f"{Colors.RED}✗ FAILED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
+                        print(f"    Invalid expect format: {expect_spec}")
+                        failed += 1
+                        test_failed_during_setup = True
+                        break
+
+                    # Determine which mode to use for verification
+                    # If test has custom large_repo_size, use that
+                    # Otherwise verify both small and large modes if expect_large is specified
+                    verify_modes = []
+                    if test_specific_size is not None:
+                        # Custom size mode
+                        verify_modes.append(('custom', test_specific_size, expect_small))
+                    elif expect_large is not None:
+                        # Both small and large modes specified
+                        verify_modes.append(('small', 100000000, expect_small))
+                        verify_modes.append(('large', 1, expect_large))
+                    else:
+                        # Only small mode (default behavior)
+                        verify_modes.append(('small', 100000000, expect_small))
+
+                    # Run verification for each mode
+                    expect_passed = True
+                    for mode_name, large_repo_size, mode_expected in verify_modes:
+                        # Get output from first binary (baseline)
+                        colored = get_git_prompt_output(str(binary_paths[0]), test_dir, with_color=True,
+                                                       large_repo_size=large_repo_size, max_traversal=max_traversal)
+                        actual = ansi_to_markers(colored)
+
+                        # Check if output matches expected
+                        if not match_output(actual, mode_expected):
+                            expect_passed = False
+                            inline_expect_results.append({
+                                'mode': mode_name,
+                                'expected': mode_expected,
+                                'actual': actual,
+                                'passed': False
+                            })
+                            if verbose:
+                                print(f"  Inline expect [{mode_name}] failed:")
+                                print(f"    Expected: {repr(mode_expected)}")
+                                print(f"    Actual:   {repr(actual)}")
+                        else:
+                            inline_expect_results.append({
+                                'mode': mode_name,
+                                'expected': mode_expected,
+                                'actual': actual,
+                                'passed': True
+                            })
+
+                    if not expect_passed:
+                        print(f"{Colors.RED}✗ FAILED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
+                        print(f"    Inline expect verification failed")
+                        for result in inline_expect_results:
+                            if not result['passed']:
+                                print(f"    [{result['mode']}] Expected: {Colors.YELLOW}{repr(result['expected'])}{Colors.RESET}")
+                                print(f"    [{result['mode']}] Actual:   {Colors.YELLOW}{repr(result['actual'])}{Colors.RESET}")
+                        failed += 1
+                        test_failed_during_setup = True
+                        break
+
+                    continue  # Don't process as a command step
+
                 # Support both string steps and dict with 'command' and 'repeat'
                 if isinstance(step_item, dict):
                     step = step_item['command']
@@ -911,22 +997,20 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                     # Only append step_info if no error occurred
                     step_results.append(step_info)
 
-            # Get max_traversal from test (for tests that override it)
-            max_traversal = test.get('max_traversal', None)
-
-            # Run tests in both small and large repo modes
+            # Run tests in both small and large repo modes (only if final expected is provided)
             # Use test-specific size if provided, otherwise use defaults
             test_modes = []
-            if test_specific_size is not None:
-                # Test has specific large_repo_size override - only test that mode
-                test_modes.append(('custom', test_specific_size, expected))
-            else:
-                # Test both small and large modes
-                # small mode: high threshold (100MB) = repo treated as small (normal colors)
-                test_modes.append(('small', 100000000, expected))
-                # large mode: low threshold (1 byte) = repo treated as large (gray, skips status checks)
-                large_expected = expected_large if expected_large is not None else expected
-                test_modes.append(('large', 1, large_expected))
+            if expected is not None:
+                if test_specific_size is not None:
+                    # Test has specific large_repo_size override - only test that mode
+                    test_modes.append(('custom', test_specific_size, expected))
+                else:
+                    # Test both small and large modes
+                    # small mode: high threshold (100MB) = repo treated as small (normal colors)
+                    test_modes.append(('small', 100000000, expected))
+                    # large mode: low threshold (1 byte) = repo treated as large (gray, skips status checks)
+                    large_expected = expected_large if expected_large is not None else expected
+                    test_modes.append(('large', 1, large_expected))
 
             all_modes_passed = True
             mode_results = []
@@ -968,31 +1052,32 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                     'diverged_binaries': diverged_binaries,
                 })
 
-            # Print result summary
-            if verbose:
-                print(f"{Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
-                for mode_result in mode_results:
-                    print(f"  Mode: {mode_result['mode']}")
-                    print(f"    Actual:   {repr(mode_result['actual'])}")
-                    print(f"    Expected: {repr(mode_result['expected'])}")
-                    if mode_result['diverged_binaries']:
-                        for idx, name_str, output in mode_result['diverged_binaries']:
-                            print(f"    {name_str} diverged: {repr(output)}")
+            # Print result summary (only if not already failed during inline expects)
+            if not test_failed_during_setup:
+                if verbose:
+                    print(f"{Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
+                    for mode_result in mode_results:
+                        print(f"  Mode: {mode_result['mode']}")
+                        print(f"    Actual:   {repr(mode_result['actual'])}")
+                        print(f"    Expected: {repr(mode_result['expected'])}")
+                        if mode_result['diverged_binaries']:
+                            for idx, name_str, output in mode_result['diverged_binaries']:
+                                print(f"    {name_str} diverged: {repr(output)}")
 
-            if all_modes_passed:
-                mode_str = f" ({', '.join(m['mode'] for m in mode_results)})"
-                print(f"{Colors.GREEN}✓ PASSED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}{mode_str}")
-                passed += 1
-            else:
-                print(f"{Colors.RED}✗ FAILED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
-                for mode_result in mode_results:
-                    if not mode_result['passed']:
-                        print(f"    [{mode_result['mode']}] {binary_names[0]} output:   {Colors.YELLOW}{repr(mode_result['actual'])}{Colors.RESET}")
-                        print(f"    [{mode_result['mode']}] Expected:                 {Colors.YELLOW}{repr(mode_result['expected'])}{Colors.RESET}")
-                    if not mode_result['binaries_agree']:
-                        for idx, name_str, output in mode_result['diverged_binaries']:
-                            print(f"    [{mode_result['mode']}] {name_str} diverged: {Colors.RED}{repr(output)}{Colors.RESET}")
-                failed += 1
+                if all_modes_passed:
+                    mode_str = f" ({', '.join(m['mode'] for m in mode_results)})" if mode_results else ""
+                    print(f"{Colors.GREEN}✓ PASSED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}{mode_str}")
+                    passed += 1
+                else:
+                    print(f"{Colors.RED}✗ FAILED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
+                    for mode_result in mode_results:
+                        if not mode_result['passed']:
+                            print(f"    [{mode_result['mode']}] {binary_names[0]} output:   {Colors.YELLOW}{repr(mode_result['actual'])}{Colors.RESET}")
+                            print(f"    [{mode_result['mode']}] Expected:                 {Colors.YELLOW}{repr(mode_result['expected'])}{Colors.RESET}")
+                        if not mode_result['binaries_agree']:
+                            for idx, name_str, output in mode_result['diverged_binaries']:
+                                print(f"    [{mode_result['mode']}] {name_str} diverged: {Colors.RED}{repr(output)}{Colors.RESET}")
+                    failed += 1
 
             # Replace expected with actual if requested
             if replace_expected:
@@ -1098,30 +1183,57 @@ def main():
 
     parser = argparse.ArgumentParser(description='Run git-prompt tests')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
-    parser.add_argument('--test-file', default='test_cases.yaml', help='Test cases YAML file')
+    parser.add_argument('--test-file', default=None, help='Test cases YAML file (default: auto-discover all test-*.yaml files)')
     parser.add_argument('--replace-expected', action='store_true', help='Replace expected values with actual output (useful for updating tests after behavior changes)')
 
     args = parser.parse_args()
 
     # Resolve paths
     script_dir = Path(__file__).parent
-    test_file = script_dir / args.test_file
     git_prompt_path = (script_dir / '../target/git-prompt').resolve()
 
-    # Check files exist
-    if not test_file.exists():
-        print(f"{Colors.RED}Test file not found: {test_file}{Colors.RESET}")
-        return 1
-
+    # Check git-prompt exists
     if not git_prompt_path.exists():
         print(f"{Colors.RED}git-prompt not found: {git_prompt_path}{Colors.RESET}")
         print(f"Did you run 'make' in the parent directory?")
         return 1
 
-    # Run tests (reports are always generated)
-    success = run_test_suite(test_file, git_prompt_path, verbose=args.verbose, replace_expected=args.replace_expected)
+    # Discover test files
+    if args.test_file:
+        # Explicit test file specified
+        test_files = [script_dir / args.test_file]
+    else:
+        # Auto-discover all test-*.yaml files, sorted alphabetically
+        test_files = sorted(script_dir.glob('test-*.yaml'))
+        # Fallback to test_cases.yaml for backward compatibility
+        if not test_files:
+            legacy_file = script_dir / 'test_cases.yaml'
+            if legacy_file.exists():
+                test_files = [legacy_file]
 
-    return 0 if success else 1
+    if not test_files:
+        print(f"{Colors.RED}No test files found in {script_dir}{Colors.RESET}")
+        print(f"Expected files matching pattern: test-*.yaml")
+        return 1
+
+    print(f"{Colors.BOLD}Discovered {len(test_files)} test file(s):{Colors.RESET}")
+    for test_file in test_files:
+        print(f"  - {test_file.name}")
+    print()
+
+    # Run tests for each file
+    all_success = True
+    for test_file in test_files:
+        if len(test_files) > 1:
+            print(f"\n{Colors.BOLD}{'='*60}{Colors.RESET}")
+            print(f"{Colors.BOLD}Running tests from: {test_file.name}{Colors.RESET}")
+            print(f"{Colors.BOLD}{'='*60}{Colors.RESET}\n")
+
+        success = run_test_suite(test_file, git_prompt_path, verbose=args.verbose, replace_expected=args.replace_expected)
+        if not success:
+            all_success = False
+
+    return 0 if all_success else 1
 
 
 if __name__ == '__main__':

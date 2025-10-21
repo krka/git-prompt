@@ -321,8 +321,8 @@ tests:
   - git bisect start
   - git bisect bad
   - git bisect good HEAD~3
-  expected: '{GREEN}[5bc0037]{} ⚡'
-  expected_large: '{GRAY}[5bc0037]{} ⚡'
+  expected: '{GREEN}[5bc0037]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
+  expected_large: '{GRAY}[5bc0037]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
 - description: Detached HEAD on tag
   name: Detached HEAD on tag
   group: detached
@@ -336,7 +336,7 @@ tests:
   - git commit -m "Version 1"
   - git tag v1.0
   - git checkout v1.0
-  expected: '{GREEN}[v1.0]{} ⚡'
+  expected: '{GREEN}[23e6adf]{} ⚡'
   expected_large: '{GRAY}[23e6adf]{} ⚡'
 - description: Branch in sync with upstream
   name: In sync with upstream

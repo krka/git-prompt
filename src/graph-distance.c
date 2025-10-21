@@ -7,7 +7,10 @@
 #include "graph-distance-cache.h"
 #include "commit.h"
 #include "oidmap.h"
+#include "oidset.h"
 #include "hex.h"
+#include "revision.h"
+#include "object.h"
 #include <stdio.h>
 
 #define BFS_QUEUE_SIZE 2048 /* Power of 2 for fast modulo via bitwise AND */

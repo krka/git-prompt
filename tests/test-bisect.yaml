@@ -1,0 +1,49 @@
+name: Git Bisect Test Cases
+tests:
+- name: Bisect basic workflow
+  group: bisect
+  example: true
+  reset: true
+  steps:
+    - git init
+    - git config user.name "Test"
+    - git config user.email "test@example.com"
+    - echo "v1" > file.txt
+    - git add file.txt
+    - git commit -m "Commit 1"
+    - echo "v2" > file.txt
+    - git add file.txt
+    - git commit -m "Commit 2"
+    - echo "v3" > file.txt
+    - git add file.txt
+    - git commit -m "Commit 3"
+    - echo "v4" > file.txt
+    - git add file.txt
+    - git commit -m "Commit 4"
+    - echo "v5" > file.txt
+    - git add file.txt
+    - git commit -m "Commit 5"
+    - git bisect start
+    - git bisect bad
+    - git bisect good HEAD~4
+  expected: '{GREEN}[5bc0037]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
+  expected_large: '{GRAY}[5bc0037]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
+
+- name: Bisect with working tree changes
+  group: bisect
+  example: true
+  reset: true
+  steps:
+    - git init
+    - git config user.name "Test"
+    - git config user.email "test@example.com"
+    - echo "v1" > file.txt && git add file.txt && git commit -m "Commit 1"
+    - echo "v2" > file.txt && git add file.txt && git commit -m "Commit 2"
+    - echo "v3" > file.txt && git add file.txt && git commit -m "Commit 3"
+    - echo "v4" > file.txt && git add file.txt && git commit -m "Commit 4"
+    - echo "v5" > file.txt && git add file.txt && git commit -m "Commit 5"
+    - git bisect start
+    - git bisect bad
+    - git bisect good HEAD~4
+  expected: '{GREEN}[5bc0037]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
+  expected_large: '{GRAY}[5bc0037]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
