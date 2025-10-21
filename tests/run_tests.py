@@ -508,80 +508,81 @@ def generate_unified_detailed_report(suites_results, output_path):
         <div class="test-details">
 """
 
-        # Add setup steps
-        if result.get('steps'):
-            html += """
-            <div class="steps-section">
-                <div class="steps-title" onclick="toggleSteps(this)">
-                    <span class="steps-expand-icon">▶</span>
-                    Setup Steps
-                </div>
-                <div class="steps-content">
+            # Add setup steps
+            if result.get('steps'):
+                html += """
+                <div class="steps-section">
+                    <div class="steps-title" onclick="toggleSteps(this)">
+                        <span class="steps-expand-icon">▶</span>
+                        Setup Steps
+                    </div>
+                    <div class="steps-content">
 """
-            for step_info in result['steps']:
-                step_class = "step error" if step_info.get('error') else "step"
-                repeat = step_info.get('repeat', 1)
-                if repeat > 1:
-                    html += f"""                <div class="{step_class}">
-                    <div style="color: #858585; font-size: 0.9em; margin-bottom: 4px;">Repeated {repeat} times:</div>
-                    <div class="step-command" style="margin-left: 16px;">$ {html_escape.escape(step_info['command'])}</div>
+                for step_info in result['steps']:
+                    step_class = "step error" if step_info.get('error') else "step"
+                    repeat = step_info.get('repeat', 1)
+                    if repeat > 1:
+                        html += f"""                <div class="{step_class}">
+                        <div style="color: #858585; font-size: 0.9em; margin-bottom: 4px;">Repeated {repeat} times:</div>
+                        <div class="step-command" style="margin-left: 16px;">$ {html_escape.escape(step_info['command'])}</div>
 """
-                else:
-                    html += f"""                <div class="{step_class}">
-                    <div class="step-command">$ {html_escape.escape(step_info['command'])}</div>
+                    else:
+                        html += f"""                <div class="{step_class}">
+                        <div class="step-command">$ {html_escape.escape(step_info['command'])}</div>
 """
-                if step_info.get('error'):
-                    html += f"""                    <div class="step-error">Error: {html_escape.escape(step_info['error'])}</div>
+                    if step_info.get('error'):
+                        html += f"""                    <div class="step-error">Error: {html_escape.escape(step_info['error'])}</div>
+"""
+                    html += """                </div>
 """
                 html += """                </div>
-"""
-            html += """                </div>
-            </div>
+                </div>
 """
 
-        # Add result section
-        html += """
-            <div class="result-section">
-                <div class="result-title">Prompt Output:</div>
+            # Add result section
+            html += """
+                <div class="result-section">
+                    <div class="result-title">Prompt Output:</div>
 """
 
-        if result['passed']:
-            # Check if we have different large mode output
-            if result.get('colored_output_large') and not result.get('is_custom_mode'):
-                # Show both small and large mode outputs
-                small_output_html = ansi_to_html(result['colored_output']) if result['colored_output'] else '<em>(no output)</em>'
-                large_output_html = ansi_to_html(result['colored_output_large'])
-                html += f"""                <div class="output-box expected">
-                    <div class="label">Small Repo Mode:</div>
-                    {small_output_html}
-                </div>
-                <div class="output-box expected">
-                    <div class="label">Large Repo Mode:</div>
-                    {large_output_html}
-                </div>
+            if result['passed']:
+                # Check if we have different large mode output
+                if result.get('colored_output_large') and not result.get('is_custom_mode'):
+                    # Show both small and large mode outputs
+                    small_output_html = ansi_to_html(result['colored_output']) if result['colored_output'] else '<em>(no output)</em>'
+                    large_output_html = ansi_to_html(result['colored_output_large'])
+                    html += f"""                <div class="output-box expected">
+                        <div class="label">Small Repo Mode:</div>
+                        {small_output_html}
+                    </div>
+                    <div class="output-box expected">
+                        <div class="label">Large Repo Mode:</div>
+                        {large_output_html}
+                    </div>
+"""
+                else:
+                    # Show just expected output (which matches actual)
+                    output_html = ansi_to_html(result['colored_output']) if result['colored_output'] else '<em>(no output)</em>'
+                    html += f"""                <div class="output-box expected">
+                        <div class="label">Expected & Actual:</div>
+                        {output_html}
+                    </div>
 """
             else:
-                # Show just expected output (which matches actual)
-                output_html = ansi_to_html(result['colored_output']) if result['colored_output'] else '<em>(no output)</em>'
+                # Show both expected and actual with highlighting
+                expected_html = html_escape.escape(result['expected']) if result['expected'] else '<em>(no output)</em>'
+                actual_html = html_escape.escape(result['actual']) if result['actual'] else '<em>(no output)</em>'
                 html += f"""                <div class="output-box expected">
-                    <div class="label">Expected & Actual:</div>
-                    {output_html}
-                </div>
-"""
-        else:
-            # Show both expected and actual with highlighting
-            expected_html = html_escape.escape(result['expected']) if result['expected'] else '<em>(no output)</em>'
-            actual_html = html_escape.escape(result['actual']) if result['actual'] else '<em>(no output)</em>'
-            html += f"""                <div class="output-box expected">
-                    <div class="label">Expected:</div>
-                    {expected_html}
-                </div>
-                <div class="output-box actual">
-                    <div class="label">Actual:</div>
-                    {actual_html}
-                </div>
+                        <div class="label">Expected:</div>
+                        {expected_html}
+                    </div>
+                    <div class="output-box actual">
+                        <div class="label">Actual:</div>
+                        {actual_html}
+                    </div>
 """
 
+            # Close result-section, test-details, and test-case (moved outside if/else)
             html += """            </div>
         </div>
     </div>
