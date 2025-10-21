@@ -6,6 +6,9 @@ tests/test-results.html
 tests/test-results.txt
 tests/documentation.html
 
+# Python cache
+**/__pycache__/
+
 # Git prompt cache (if testing in this repo)
 .git/prompt-cache
 
