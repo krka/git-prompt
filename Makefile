@@ -86,9 +86,81 @@ TEST_RUNNER = tests/run_tests.py
 # 3. Git's internal Makefile already parallelizes the submodule build
 .NOTPARALLEL: $(GIT_RAW_LIB) $(GIT_PATCHED_LIB)
 
+# Dependency checking
+# This ensures all required system libraries are installed before building
+.PHONY: check-deps
+check-deps:
+	@echo "Checking build dependencies..."
+	@MISSING="" ; \
+	MISSING_PKGS="" ; \
+	\
+	if ! echo '#include <zlib.h>' | $(CC) -E - >/dev/null 2>&1; then \
+		MISSING="$$MISSING zlib.h" ; \
+		MISSING_PKGS="$$MISSING_PKGS zlib1g-dev" ; \
+	fi ; \
+	\
+	if ! echo '#include <openssl/ssl.h>' | $(CC) -E - >/dev/null 2>&1; then \
+		MISSING="$$MISSING openssl/ssl.h" ; \
+		MISSING_PKGS="$$MISSING_PKGS libssl-dev" ; \
+	fi ; \
+	\
+	if ! echo '#include <curl/curl.h>' | $(CC) -E - >/dev/null 2>&1; then \
+		MISSING="$$MISSING curl/curl.h" ; \
+		MISSING_PKGS="$$MISSING_PKGS libcurl4-openssl-dev" ; \
+	fi ; \
+	\
+	if ! echo '#include <expat.h>' | $(CC) -E - >/dev/null 2>&1; then \
+		MISSING="$$MISSING expat.h" ; \
+		MISSING_PKGS="$$MISSING_PKGS libexpat1-dev" ; \
+	fi ; \
+	\
+	if ! $(CC) --version >/dev/null 2>&1; then \
+		MISSING="$$MISSING compiler" ; \
+		MISSING_PKGS="$$MISSING_PKGS build-essential" ; \
+	fi ; \
+	\
+	if ! command -v pkg-config >/dev/null 2>&1; then \
+		MISSING="$$MISSING pkg-config" ; \
+		MISSING_PKGS="$$MISSING_PKGS pkg-config" ; \
+	fi ; \
+	\
+	if [ -n "$$MISSING" ]; then \
+		echo "" ; \
+		echo "✗ Missing dependencies:$$MISSING" ; \
+		echo "" ; \
+		if command -v apt-get >/dev/null 2>&1; then \
+			echo "Install with:" ; \
+			echo "  sudo apt-get install$$MISSING_PKGS" ; \
+		elif command -v dnf >/dev/null 2>&1; then \
+			echo "Install with dnf (package names may differ):" ; \
+			echo "  sudo dnf install$$MISSING_PKGS" ; \
+		elif command -v yum >/dev/null 2>&1; then \
+			echo "Install with yum (package names may differ):" ; \
+			echo "  sudo yum install$$MISSING_PKGS" ; \
+		elif command -v pacman >/dev/null 2>&1; then \
+			echo "Install with pacman:" ; \
+			echo "  sudo pacman -S zlib openssl curl expat base-devel pkg-config" ; \
+		elif command -v brew >/dev/null 2>&1; then \
+			echo "Install with Homebrew:" ; \
+			echo "  brew install openssl curl expat pkg-config" ; \
+		else \
+			echo "Please install the following development packages:" ; \
+			echo "  - zlib development headers" ; \
+			echo "  - OpenSSL development headers" ; \
+			echo "  - libcurl development headers" ; \
+			echo "  - expat development headers" ; \
+			echo "  - C compiler (gcc or clang)" ; \
+			echo "  - pkg-config" ; \
+		fi ; \
+		echo "" ; \
+		exit 1 ; \
+	else \
+		echo "✓ All required dependencies found" ; \
+	fi
+
 # Default target - build all binaries (core + sanitizers)
 .PHONY: all
-all: $(EXECUTABLE) $(EXECUTABLE_UNPATCHED) $(EXECUTABLE_PATCHED_DEBUG) $(EXECUTABLE_ASAN) $(EXECUTABLE_UBSAN)
+all: check-deps $(EXECUTABLE) $(EXECUTABLE_UNPATCHED) $(EXECUTABLE_PATCHED_DEBUG) $(EXECUTABLE_ASAN) $(EXECUTABLE_UBSAN)
 	@echo ""
 	@echo "Build complete! Five binaries built:"
 	@ls -lh $(EXECUTABLE_UNPATCHED) $(EXECUTABLE_PATCHED_DEBUG) $(EXECUTABLE) $(EXECUTABLE_ASAN) $(EXECUTABLE_UBSAN) 2>/dev/null | awk '{print $$9 " - " $$5}' || true
@@ -392,6 +464,7 @@ uninstall:
 help:
 	@echo "git-prompt build targets:"
 	@echo "  all              - Build all binaries (default: 3 core + 2 sanitizers)"
+	@echo "  check-deps       - Check for required build dependencies"
 	@echo "  test             - Run tests (auto-discovers and tests all binaries)"
 	@echo "  test-update      - Run tests and update expectations (--replace-expected)"
 	@echo "  docs             - Generate HTML documentation with examples"
@@ -421,3 +494,4 @@ help:
 	@echo "the unpatched version is correct and patched versions are broken."
 	@echo ""
 	@echo "First build will compile git libraries (~30s), subsequent builds are fast."
+	@echo "Dependencies are checked automatically before building git libraries."
