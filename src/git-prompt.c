@@ -269,6 +269,8 @@ struct git_state {
   int has_conflicts;       /* 1 if unmerged files exist */
   const char *state_name;  /* e.g., "merge:conflict", "rebase:continue" */
   const char *state_color; /* Color for the state indicator */
+  int msgnum;              /* Current commit number (for rebase) */
+  int end;                 /* Total commits (for rebase) */
 };
 
 /*
@@ -499,6 +501,58 @@ static int has_git_state_files(void)
 }
 
 /*
+ * Read rebase progress information from msgnum and end files.
+ * These files track which commit is currently being processed and the total count.
+ *
+ * Performance: O(1) - reads two small files
+ * Safe for large repo mode: Yes (no index operations)
+ *
+ * Parameters:
+ *   gitdir - Git directory path
+ *   rebase_dir - Name of the rebase directory ("rebase-merge" or "rebase-apply")
+ *   msgnum - Output: current commit number (1-based)
+ *   end - Output: total number of commits
+ */
+static void read_rebase_progress(const char *gitdir, const char *rebase_dir, int *msgnum, int *end)
+{
+  struct strbuf path = STRBUF_INIT;
+  struct strbuf content = STRBUF_INIT;
+
+  /* Read msgnum (current commit) - rebase-merge uses "msgnum", rebase-apply uses "next" */
+  strbuf_addf(&path, "%s/%s/msgnum", gitdir, rebase_dir);
+  if (strbuf_read_file(&content, path.buf, 0) > 0) {
+    *msgnum = atoi(content.buf);
+  } else {
+    /* Try "next" for git am (rebase-apply) */
+    strbuf_reset(&path);
+    strbuf_reset(&content);
+    strbuf_addf(&path, "%s/%s/next", gitdir, rebase_dir);
+    if (strbuf_read_file(&content, path.buf, 0) > 0) {
+      *msgnum = atoi(content.buf);
+    }
+  }
+
+  /* Read end (total commits) - rebase-merge uses "end", rebase-apply uses "last" */
+  strbuf_reset(&path);
+  strbuf_reset(&content);
+  strbuf_addf(&path, "%s/%s/end", gitdir, rebase_dir);
+  if (strbuf_read_file(&content, path.buf, 0) > 0) {
+    *end = atoi(content.buf);
+  } else {
+    /* Try "last" for git am (rebase-apply) */
+    strbuf_reset(&path);
+    strbuf_reset(&content);
+    strbuf_addf(&path, "%s/%s/last", gitdir, rebase_dir);
+    if (strbuf_read_file(&content, path.buf, 0) > 0) {
+      *end = atoi(content.buf);
+    }
+  }
+
+  strbuf_release(&path);
+  strbuf_release(&content);
+}
+
+/*
  * Detect special git states (merge, rebase, etc.) and populate git_state struct.
  * Requires index_loaded to be 1 for conflict detection.
  *
@@ -511,17 +565,19 @@ static int has_git_state_files(void)
  */
 static struct git_state get_git_state(int index_loaded)
 {
-  struct git_state state = {0, 0, NULL, NULL};
+  struct git_state state = {0, 0, NULL, NULL, 0, 0};
   const char *gitdir = repo_get_git_dir(the_repository);
 
   /* Check for rebase (interactive or apply mode) */
   if (check_git_state_file(gitdir, "rebase-merge", &state, index_loaded, "rebase:conflict",
                            "rebase:continue")) {
+    read_rebase_progress(gitdir, "rebase-merge", &state.msgnum, &state.end);
     return state;
   }
 
   if (check_git_state_file(gitdir, "rebase-apply", &state, index_loaded, "rebase:conflict",
                            "rebase:continue")) {
+    read_rebase_progress(gitdir, "rebase-apply", &state.msgnum, &state.end);
     return state;
   }
 
@@ -1101,7 +1157,12 @@ static void get_misc_indicators(struct strbuf *indicators, int detached,
 
   /* Display git state if present (merge, rebase, cherry-pick, etc.) */
   if (state->has_state) {
-    strbuf_color_addf(indicators, state->state_color, "[%s]", state->state_name);
+    if (state->msgnum > 0 && state->end > 0) {
+      strbuf_color_addf(indicators, state->state_color, "[%s %d/%d]", state->state_name,
+                        state->msgnum, state->end);
+    } else {
+      strbuf_color_addf(indicators, state->state_color, "[%s]", state->state_name);
+    }
   }
 
   /* Check for bisect in progress */
