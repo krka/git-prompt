@@ -80,6 +80,27 @@ tests:
   - git commit -m "Master change"
   - git cherry-pick feature || true
   expected: '{RED}[master]{} {RED}[cherrypick:conflict]{}'
+- description: Cherry-pick sequence with remaining commits
+  name: Cherry-pick sequence (+5 more)
+  group: in-progress
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "base" > file.txt
+  - git add file.txt
+  - git commit -m "base"
+  - git checkout -b source
+  - command: echo "source$i" >> source.txt && git add source.txt && git commit -m "source$i"
+    repeat: 8
+  - git checkout master
+  - echo "conflict" > source.txt
+  - git add source.txt
+  - git commit -m "conflict"
+  - git cherry-pick source~5..source || true
+  expected: '{RED}[master]{} {RED}[cherrypick:conflict +5]{}'
 - description: Rebase with conflicts
   name: Rebase with conflicts
   group: in-progress

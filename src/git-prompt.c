@@ -271,6 +271,7 @@ struct git_state {
   const char *state_color; /* Color for the state indicator */
   int msgnum;              /* Current commit number (for rebase) */
   int end;                 /* Total commits (for rebase) */
+  int remaining;           /* Remaining commits (for cherry-pick/revert sequences) */
 };
 
 /*
@@ -553,6 +554,44 @@ static void read_rebase_progress(const char *gitdir, const char *rebase_dir, int
 }
 
 /*
+ * Count remaining commits in a cherry-pick or revert sequence.
+ * Reads .git/sequencer/todo and counts lines starting with "pick".
+ *
+ * Performance: O(n) where n = lines in todo file (typically small)
+ * Safe for large repo mode: Yes (no index operations)
+ *
+ * Parameters:
+ *   gitdir - Git directory path
+ *
+ * Returns: Number of remaining commits, or 0 if no sequencer state
+ */
+static int count_sequencer_remaining(const char *gitdir)
+{
+  struct strbuf path = STRBUF_INIT;
+  struct strbuf content = STRBUF_INIT;
+  int count = 0;
+
+  strbuf_addf(&path, "%s/sequencer/todo", gitdir);
+  if (strbuf_read_file(&content, path.buf, 0) > 0) {
+    const char *line = content.buf;
+    while (line && *line) {
+      /* Count lines starting with "pick " (cherry-pick/revert commands) */
+      if (starts_with(line, "pick ")) {
+        count++;
+      }
+      line = strchr(line, '\n');
+      if (line) {
+        line++; /* skip newline */
+      }
+    }
+  }
+
+  strbuf_release(&path);
+  strbuf_release(&content);
+  return count;
+}
+
+/*
  * Detect special git states (merge, rebase, etc.) and populate git_state struct.
  * Requires index_loaded to be 1 for conflict detection.
  *
@@ -565,7 +604,7 @@ static void read_rebase_progress(const char *gitdir, const char *rebase_dir, int
  */
 static struct git_state get_git_state(int index_loaded)
 {
-  struct git_state state = {0, 0, NULL, NULL, 0, 0};
+  struct git_state state = {0, 0, NULL, NULL, 0, 0, 0};
   const char *gitdir = repo_get_git_dir(the_repository);
 
   /* Check for rebase (interactive or apply mode) */
@@ -590,12 +629,18 @@ static struct git_state get_git_state(int index_loaded)
   /* Check for cherry-pick */
   if (check_git_state_file(gitdir, "CHERRY_PICK_HEAD", &state, index_loaded, "cherrypick:conflict",
                            "cherrypick:commit")) {
+    state.remaining = count_sequencer_remaining(gitdir);
     return state;
   }
 
   /* Check for revert */
   check_git_state_file(gitdir, "REVERT_HEAD", &state, index_loaded, "revert:conflict",
                        "revert:commit");
+
+  /* If revert is in progress, count remaining commits */
+  if (state.has_state) {
+    state.remaining = count_sequencer_remaining(gitdir);
+  }
 
   return state;
 }
@@ -1158,8 +1203,13 @@ static void get_misc_indicators(struct strbuf *indicators, int detached,
   /* Display git state if present (merge, rebase, cherry-pick, etc.) */
   if (state->has_state) {
     if (state->msgnum > 0 && state->end > 0) {
+      /* Rebase progress: show current/total (e.g., "6/11") */
       strbuf_color_addf(indicators, state->state_color, "[%s %d/%d]", state->state_name,
                         state->msgnum, state->end);
+    } else if (state->remaining > 0) {
+      /* Cherry-pick/revert sequence: show remaining count (e.g., "+8") */
+      strbuf_color_addf(indicators, state->state_color, "[%s +%d]", state->state_name,
+                        state->remaining);
     } else {
       strbuf_color_addf(indicators, state->state_color, "[%s]", state->state_name);
     }
