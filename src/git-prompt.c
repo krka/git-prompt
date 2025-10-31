@@ -843,18 +843,10 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
   char *main_branch_allocated = NULL; /* Track if main_branch was allocated */
   int main_from_symref = 0; /* 1 if main_branch from origin/HEAD symref, 0 if from fallback */
 
-  /* Determine the default remote name (e.g., "origin", "upstream", etc.) */
-  const char *remote_name = NULL;
-  struct branch *current_branch = branch_get(NULL);
-  if (current_branch) {
-    /* Get the remote for this branch (handles branch.<name>.remote config) */
-    remote_name = remote_for_branch(current_branch, NULL);
-  }
-
-  /* Fallback to "origin" if no remote is configured */
-  if (!remote_name) {
-    remote_name = "origin";
-  }
+  /* Always use "origin" as the default remote for main branch detection.
+   * This is the canonical upstream in most workflows (including forks).
+   * The tracking remote (where you push) may differ from the upstream. */
+  const char *remote_name = "origin";
 
   if (debug_mode) {
     fprintf(stderr, "[DEBUG] Using remote: %s\n", remote_name);
@@ -944,8 +936,9 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
   int has_upstream = 0;
   int upstream_is_main = 0;
 
-  /* Use branch API to get upstream tracking branch (reuse current_branch from Phase 1) */
+  /* Use branch API to get upstream tracking branch */
   const char *upstream = NULL;
+  struct branch *current_branch = branch_get(NULL);
   if (current_branch) {
     upstream = branch_get_upstream(current_branch, NULL);
   }
