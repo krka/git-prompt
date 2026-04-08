@@ -165,6 +165,10 @@ static const char prompt_help[] =
   "  ↑N↓M     - N commits ahead, M commits behind\n"
   "  ↕        - Too far diverged from main (>max-traversal commits, red)\n"
   "\n"
+  "WORKTREE INDICATORS:\n"
+  "  🌳       - Linked worktree (full checkout)\n"
+  "  🪾       - Sparse worktree (partial checkout)\n"
+  "\n"
   "OTHER INDICATORS:\n"
   "  💾       - Stashed changes present (cyan)\n"
   "\n"
@@ -1177,7 +1181,7 @@ static int get_bisect_indicator(struct strbuf *indicators, const struct prompt_c
 
 /*
  * Section 3: Collect miscellaneous indicators.
- * Includes: detached HEAD, git state (merge/rebase/etc), stash, bisect.
+ * Includes: detached HEAD, git state (merge/rebase/etc), worktree type, stash, bisect.
  *
  * Takes git_state computed earlier to avoid redundant checks.
  *
@@ -1210,6 +1214,25 @@ static void get_misc_indicators(struct strbuf *indicators, int detached,
 
   /* Check for bisect in progress */
   get_bisect_indicator(indicators, ctx);
+
+  /*
+   * Worktree type indicator (emoji, no color)
+   * Linked worktrees have different_commondir set (gitdir != commondir).
+   * Sparse worktrees additionally have info/sparse-checkout file present.
+   * Main checkouts show no indicator (the default state).
+   *
+   * Performance: O(1) - struct field check + one stat() call
+   */
+  if (the_repository->different_commondir) {
+    struct strbuf sparse_path = STRBUF_INIT;
+    strbuf_addf(&sparse_path, "%s/info/sparse-checkout", repo_get_git_dir(the_repository));
+    if (file_exists(sparse_path.buf)) {
+      strbuf_addstr(indicators, "🪾 ");
+    } else {
+      strbuf_addstr(indicators, "🌳");
+    }
+    strbuf_release(&sparse_path);
+  }
 
   /* Check for stashed changes (emoji, color has no effect) */
   if (refs_ref_exists(ctx->refs, "refs/stash")) {

@@ -979,6 +979,14 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
             # Override large_repo_size: use test-specific value if provided
             test_specific_size = test.get('large_repo_size', None)
 
+            # Override cwd for git-prompt execution (steps still run in test_dir)
+            # Relative paths are resolved from test_dir's parent (tmpdir)
+            cwd_override = test.get('cwd', None)
+            if cwd_override:
+                prompt_cwd = os.path.normpath(os.path.join(test_dir, cwd_override))
+            else:
+                prompt_cwd = test_dir
+
             # Track steps for detailed report
             step_results = []
             test_failed_during_setup = False
@@ -1037,7 +1045,7 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                     expect_passed = True
                     for mode_name, large_repo_size, mode_expected in verify_modes:
                         # Get output from first binary (baseline)
-                        colored = get_git_prompt_output(str(binary_paths[0]), test_dir, with_color=True,
+                        colored = get_git_prompt_output(str(binary_paths[0]), prompt_cwd, with_color=True,
                                                        large_repo_size=large_repo_size, max_traversal=max_traversal)
                         actual = ansi_to_markers(colored)
 
@@ -1129,7 +1137,7 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                 # Run all binaries and collect outputs
                 binary_outputs = []
                 for binary_path in binary_paths:
-                    colored = get_git_prompt_output(str(binary_path), test_dir, with_color=True, large_repo_size=large_repo_size, max_traversal=max_traversal)
+                    colored = get_git_prompt_output(str(binary_path), prompt_cwd, with_color=True, large_repo_size=large_repo_size, max_traversal=max_traversal)
                     actual = ansi_to_markers(colored)
                     binary_outputs.append((colored, actual))
 

@@ -214,6 +214,46 @@ tests:
   - git worktree add ../worktree-dir feature
   expected: '{GREEN}[master]{}'
   expected_large: '{GRAY}[master]{}'
+- description: Running git-prompt inside a linked worktree
+  name: Linked worktree (full checkout)
+  group: worktree
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "main" > file.txt
+  - git add file.txt
+  - git commit -m "Main commit"
+  - git checkout -b feature
+  - echo "feature" > feature.txt
+  - git add feature.txt
+  - git commit -m "Feature commit"
+  - git checkout master
+  - git worktree add ../worktree-dir feature
+  cwd: ../worktree-dir
+  expected: '{GREEN}[feature]{} 🌳'
+  expected_large: '{GRAY}[feature]{} 🌳'
+- description: Running git-prompt inside a sparse worktree
+  name: Sparse worktree
+  group: worktree
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - mkdir src docs
+  - echo "code" > src/main.c
+  - echo "docs" > docs/readme.txt
+  - git add src docs
+  - git commit -m "Initial commit"
+  - git checkout -b sparse-feature
+  - git checkout master
+  - git worktree add ../sparse-wt sparse-feature
+  - cd ../sparse-wt && git sparse-checkout init --cone && git sparse-checkout set src
+  cwd: ../sparse-wt
+  expected: '{GREEN}[sparse-feature]{} 🪾 '
+  expected_large: '{GRAY}[sparse-feature]{} 🪾 '
 - description: Git am (apply mailbox) clean apply
   name: Git am clean apply
   group: am
