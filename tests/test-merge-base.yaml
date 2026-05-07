@@ -1,0 +1,143 @@
+tests:
+- name: 'Linear: HEAD vs HEAD~5'
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - command: echo $RANDOM >> f.txt && git add f.txt && git commit -q -m "commit"
+    repeat: 10
+  - expect:
+      command: merge-base --from=HEAD --to=HEAD~5 --max-traversal=5000
+      match_cmd: git merge-base HEAD HEAD~5
+  - expect:
+      command: merge-base --from=HEAD --to=HEAD~1 --max-traversal=5000
+      match_cmd: git merge-base HEAD HEAD~1
+  - expect:
+      command: merge-base --from=HEAD~3 --to=HEAD~7 --max-traversal=5000
+      match_cmd: git merge-base HEAD~3 HEAD~7
+  - expect:
+      command: merge-base --from=HEAD --to=HEAD --max-traversal=5000
+      match_cmd: git merge-base HEAD HEAD
+- name: Simple branch
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - echo base > f.txt && git add f.txt && git commit -q -m "base"
+  - echo v2 > f.txt && git add f.txt && git commit -q -m "master-2"
+  - git checkout -q -b feature HEAD~1
+  - echo feat > g.txt && git add g.txt && git commit -q -m "feature-1"
+  - echo feat2 > g.txt && git add g.txt && git commit -q -m "feature-2"
+  - expect:
+      command: merge-base --from=master --to=feature --max-traversal=5000
+      match_cmd: git merge-base master feature
+  - expect:
+      command: merge-base --from=feature --to=master --max-traversal=5000
+      match_cmd: git merge-base feature master
+- name: Merge-commit topology
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - echo base > f.txt && git add f.txt && git commit -q -m "base"
+  - git checkout -q -b branch-1
+  - echo b1-1 > b1.txt && git add b1.txt && git commit -q -m "b1-1"
+  - echo b1-2 > b1.txt && git add b1.txt && git commit -q -m "b1-2"
+  - echo b1-3 > b1.txt && git add b1.txt && git commit -q -m "b1-3"
+  - git checkout -q master
+  - echo m1 >> f.txt && git add f.txt && git commit -q -m "master-1"
+  - git merge -q --no-edit branch-1
+  - git checkout -q -b branch-2
+  - echo b2-1 > b2.txt && git add b2.txt && git commit -q -m "b2-1"
+  - echo b2-2 > b2.txt && git add b2.txt && git commit -q -m "b2-2"
+  - echo b2-3 > b2.txt && git add b2.txt && git commit -q -m "b2-3"
+  - git checkout -q master
+  - echo m2 >> f.txt && git add f.txt && git commit -q -m "master-2"
+  - git merge -q --no-edit branch-2
+  - expect:
+      command: merge-base --from=HEAD --to=branch-1 --max-traversal=5000
+      match_cmd: git merge-base HEAD branch-1
+  - expect:
+      command: merge-base --from=branch-1 --to=branch-2 --max-traversal=5000
+      match_cmd: git merge-base branch-1 branch-2
+- name: Diamond merge
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - echo root > f.txt && git add f.txt && git commit -q -m "root"
+  - git checkout -q -b left
+  - echo left > l.txt && git add l.txt && git commit -q -m "left-1"
+  - git checkout -q master
+  - git checkout -q -b right
+  - echo right > r.txt && git add r.txt && git commit -q -m "right-1"
+  - git checkout -q master
+  - git merge -q --no-edit left
+  - git merge -q --no-edit right
+  - expect:
+      command: merge-base --from=HEAD --to=left --max-traversal=5000
+      match_cmd: git merge-base HEAD left
+  - expect:
+      command: merge-base --from=HEAD --to=right --max-traversal=5000
+      match_cmd: git merge-base HEAD right
+  - expect:
+      command: merge-base --from=left --to=right --max-traversal=5000
+      match_cmd: git merge-base left right
+- name: Deep merge DAG
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - echo base > f.txt && git add f.txt && git commit -q -m "base"
+  - git checkout -q -b deep-1
+  - command: echo d1 > d1.txt && git add d1.txt && git commit -q -m "deep-1"
+    repeat: 5
+  - git checkout -q master
+  - echo m1 >> f.txt && git add f.txt && git commit -q -m "master-1"
+  - git merge -q --no-edit deep-1
+  - git checkout -q -b deep-2
+  - command: echo d2 > d2.txt && git add d2.txt && git commit -q -m "deep-2"
+    repeat: 5
+  - git checkout -q master
+  - echo m2 >> f.txt && git add f.txt && git commit -q -m "master-2"
+  - git merge -q --no-edit deep-2
+  - git checkout -q -b deep-3
+  - command: echo d3 > d3.txt && git add d3.txt && git commit -q -m "deep-3"
+    repeat: 5
+  - git checkout -q master
+  - echo m3 >> f.txt && git add f.txt && git commit -q -m "master-3"
+  - git merge -q --no-edit deep-3
+  - expect:
+      command: merge-base --from=HEAD --to=deep-1 --max-traversal=5000
+      match_cmd: git merge-base HEAD deep-1
+  - expect:
+      command: merge-base --from=deep-1 --to=deep-3 --max-traversal=5000
+      match_cmd: git merge-base deep-1 deep-3
+- name: Branch with merge-from-master
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - echo base > f.txt && git add f.txt && git commit -q -m "base"
+  - echo v2 > f.txt && git add f.txt && git commit -q -m "master-2"
+  - git checkout -q -b feature HEAD~1
+  - echo feat > g.txt && git add g.txt && git commit -q -m "feature-1"
+  - git merge -q --no-edit master
+  - echo feat2 > g.txt && git add g.txt && git commit -q -m "feature-2"
+  - git checkout -q master
+  - echo v3 > f.txt && git add f.txt && git commit -q -m "master-3"
+  - expect:
+      command: merge-base --from=master --to=feature --max-traversal=5000
+      match_cmd: git merge-base master feature

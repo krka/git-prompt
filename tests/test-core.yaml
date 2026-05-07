@@ -75,8 +75,8 @@ tests:
   example: true
   steps:
   - git checkout HEAD~1
-  expected: '{GREEN}[842fbac]{} ⚡'
-  expected_large: '{GRAY}[842fbac]{} ⚡'
+  expected: '{GREEN}[463901f]{} ⚡'
+  expected_large: '{GRAY}[463901f]{} ⚡'
 - description: Returning to feature branch
   name: Back to feature branch
   group: branches
@@ -186,5 +186,5 @@ tests:
   - git commit -m "Version 1"
   - git tag v1.0
   - git checkout v1.0
-  expected: '{GREEN}[23e6adf]{} ⚡'
-  expected_large: '{GRAY}[23e6adf]{} ⚡'
+  expected: '{GREEN}[5695746]{} ⚡'
+  expected_large: '{GRAY}[5695746]{} ⚡'

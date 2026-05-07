@@ -43,4 +43,25 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
                                              const struct object_id *target, int max_steps,
                                              int debug);
 
+/*
+ * Two-phase merge-base: fast BFS for approximate answer, then
+ * timestamp-bounded LCA search for the exact answer.
+ *
+ * Phase 1: Bidirectional BFS finds a valid common ancestor A_approx.
+ *          Fast (<1ms) but may overshoot on merge-heavy DAGs.
+ *
+ * Phase 2: Priority-queue LCA search (newest-first by committer timestamp).
+ *          Paints commits from both sides, stops when timestamp drops below
+ *          A_approx's timestamp minus a safety margin. The most recent
+ *          common ancestor found is the true LCA.
+ *
+ * Returns:
+ *   - ancestor is the true LCA (or best approximation within budget)
+ *   - ahead/behind are set to 0 (not computed in merge-base mode)
+ *   - commits_visited is the total across both phases
+ */
+struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
+                                               const struct object_id *target, int max_steps,
+                                               int debug);
+
 #endif /* GRAPH_DISTANCE_H */

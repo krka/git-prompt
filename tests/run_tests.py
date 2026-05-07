@@ -28,20 +28,25 @@ class Colors:
     BOLD = '\033[1m'
 
 
+_git_timestamp = 1577836800  # 2020-01-01T00:00:00Z as Unix epoch
+
 def run_command(cmd, cwd, verbose=False):
     """Run a shell command and return output"""
+    global _git_timestamp
     if verbose:
         print(f"    $ {cmd}")
 
-    # Set fixed Git environment variables for deterministic commits
+    _git_timestamp += 1
+
+    # Monotonically increasing timestamps for deterministic, ordered commits
     env = os.environ.copy()
     env.update({
         'GIT_AUTHOR_NAME': 'Test User',
         'GIT_AUTHOR_EMAIL': 'test@example.com',
         'GIT_COMMITTER_NAME': 'Test User',
         'GIT_COMMITTER_EMAIL': 'test@example.com',
-        'GIT_AUTHOR_DATE': '2020-01-01T00:00:00Z',
-        'GIT_COMMITTER_DATE': '2020-01-01T00:00:00Z',
+        'GIT_AUTHOR_DATE': f'{_git_timestamp} +0000',
+        'GIT_COMMITTER_DATE': f'{_git_timestamp} +0000',
     })
 
     result = subprocess.run(
@@ -75,6 +80,14 @@ def get_git_prompt_output(git_prompt_path, cwd, with_color=False, large_repo_siz
     return stdout.rstrip()
 
 
+def get_subcommand_output(git_prompt_path, cwd, subcommand_args):
+    """Run git-prompt with a custom subcommand (e.g. merge-base --from=X --to=Y).
+    Always appends --local. Returns (stdout, returncode)."""
+    cmd = f"{git_prompt_path} {subcommand_args} --local"
+    returncode, stdout, stderr = run_command(cmd, cwd=cwd, verbose=False)
+    return stdout.rstrip(), returncode
+
+
 def match_output(actual, expected):
     """
     Match actual output against expected, supporting variables:
@@ -87,6 +100,7 @@ def match_output(actual, expected):
     pattern = re.escape(expected)
 
     # Replace our variables with regex patterns
+    pattern = pattern.replace(r'\$HASH', r'[0-9a-f]{40}')
     pattern = pattern.replace(r'\$NUMBER', r'\d+')
     pattern = pattern.replace(r'\$ANYTHING', r'\S+')
 
@@ -929,6 +943,9 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
         tuple: (success, test_results) where success is boolean and test_results is list of dicts
     """
 
+    global _git_timestamp
+    _git_timestamp = 1577836800  # Reset to epoch base for each suite
+
     # Get all required test binaries
     try:
         test_binaries = get_test_binaries(git_prompt_path)
@@ -1015,21 +1032,63 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                     # This is an inline expect step
                     expect_spec = step_item['expect']
 
-                    # Parse expect format: either simple string or dict with small/large
+                    # Parse expect format: string, dict with small/large, or dict with command/output
                     if isinstance(expect_spec, str):
                         # Simple format: expect: "pattern"
                         expect_small = expect_spec
+                        expect_large = None
+                        subcommand = None
+                    elif isinstance(expect_spec, dict) and 'command' in expect_spec:
+                        # Subcommand format: expect: {command: "merge-base ...", output: "pattern"}
+                        subcommand = expect_spec['command']
+                        expect_small = expect_spec.get('output', '')
                         expect_large = None
                     elif isinstance(expect_spec, dict):
                         # Dict format: expect: {small: "pattern", large: "pattern"}
                         expect_small = expect_spec.get('small', '')
                         expect_large = expect_spec.get('large', None)
+                        subcommand = None
                     else:
                         print(f"{Colors.RED}✗ FAILED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
                         print(f"    Invalid expect format: {expect_spec}")
                         failed += 1
                         test_failed_during_setup = True
                         break
+
+                    if subcommand is not None:
+                        # Subcommand mode: run custom command against the binary
+                        actual, rc = get_subcommand_output(str(binary_paths[0]), prompt_cwd, subcommand)
+
+                        # If match_cmd is specified, run it to get expected output
+                        match_cmd = expect_spec.get('match_cmd', None) if isinstance(expect_spec, dict) else None
+                        if match_cmd:
+                            _, match_stdout, _ = run_command(match_cmd, prompt_cwd, verbose=False)
+                            expected_val = match_stdout.rstrip()
+                        else:
+                            expected_val = expect_small
+
+                        expect_passed = match_output(actual, expected_val)
+                        inline_expect_results.append({
+                            'mode': 'subcommand',
+                            'expected': expected_val,
+                            'actual': actual,
+                            'passed': expect_passed,
+                        })
+                        if not expect_passed:
+                            if verbose:
+                                print(f"  Inline expect [subcommand] failed:")
+                                print(f"    Command:  {subcommand}")
+                                print(f"    Expected: {repr(expected_val)}")
+                                print(f"    Actual:   {repr(actual)}")
+                            print(f"{Colors.RED}✗ FAILED{Colors.RESET} {Colors.BOLD}[{i}/{len(tests)}]{Colors.RESET} {name}")
+                            print(f"    Inline expect verification failed")
+                            print(f"    [subcommand] Command:  {subcommand}")
+                            print(f"    [subcommand] Expected: {Colors.YELLOW}{repr(expected_val)}{Colors.RESET}")
+                            print(f"    [subcommand] Actual:   {Colors.YELLOW}{repr(actual)}{Colors.RESET}")
+                            failed += 1
+                            test_failed_during_setup = True
+                            break
+                        continue  # Don't process as a command step
 
                     # Determine which mode to use for verification
                     # If test has custom large_repo_size, use that

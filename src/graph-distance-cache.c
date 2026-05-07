@@ -196,18 +196,15 @@ struct cache_result read_distance_cache(const struct object_id *oid1, const stru
     goto cleanup;
   }
 
-  /* Read ancestor OID if both ahead > 0 and behind > 0 (diverged case) */
-  if (ahead > 0 && behind > 0) {
-    if (fscanf(fp, "%40s", ancestor_hex) == 1) {
-      if (get_oid_hex(ancestor_hex, &result.ancestor) < 0) {
-        if (debug) {
-          fprintf(stderr, "[DEBUG] Cache: invalid ancestor OID in %s\n", cache_path.buf);
-        }
-        fclose(fp);
-        goto cleanup;
-      }
+  /* Read ancestor OID (required in v2 format, missing = cache miss for self-healing) */
+  if (fscanf(fp, " %40s", ancestor_hex) != 1 ||
+      get_oid_hex(ancestor_hex, &result.ancestor) < 0) {
+    if (debug) {
+      fprintf(stderr, "[DEBUG] Cache: missing/invalid ancestor in %s (stale v1 entry)\n",
+              cache_path.buf);
     }
-    /* If ancestor not present, keep as null_oid (already initialized) */
+    fclose(fp);
+    goto cleanup;
   }
   fclose(fp);
 
@@ -286,11 +283,7 @@ void write_distance_cache(const struct object_id *oid1, const struct object_id *
     goto cleanup;
   }
 
-  /* Write format: "ahead,behind\n" and optionally "ancestor_oid\n" if diverged */
-  fprintf(fp, "%d,%d\n", norm_ahead, norm_behind);
-  if (norm_ahead > 0 && norm_behind > 0) {
-    fprintf(fp, "%s\n", oid_to_hex(ancestor));
-  }
+  fprintf(fp, "%d,%d\n%s\n", norm_ahead, norm_behind, oid_to_hex(ancestor));
   fclose(fp);
 
   if (debug) {

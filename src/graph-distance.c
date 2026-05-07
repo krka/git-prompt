@@ -11,6 +11,7 @@
 #include "hex.h"
 #include "revision.h"
 #include "object.h"
+#include "prio-queue.h"
 #include <stdio.h>
 
 #define BFS_QUEUE_SIZE 2048 /* Power of 2 for fast modulo via bitwise AND */
@@ -257,6 +258,168 @@ cleanup:
     free(entry);
   }
   oidmap_clear(&distances, 0);
+
+  return result;
+}
+
+/*
+ * Phase 2 helper: oidmap entry tracking which sides have reached a commit.
+ */
+#define LCA_SIDE_A (1u << 0)
+#define LCA_SIDE_B (1u << 1)
+
+struct lca_map_entry {
+  struct oidmap_entry entry; /* Must be first */
+  unsigned int flags;
+  int dist_a; /* shortest known distance from side A (-1 if not reached) */
+  int dist_b; /* shortest known distance from side B (-1 if not reached) */
+};
+
+static struct lca_map_entry *lca_get_or_create(struct oidmap *map,
+                                               const struct object_id *oid)
+{
+  struct lca_map_entry *e = oidmap_get(map, oid);
+  if (!e) {
+    CALLOC_ARRAY(e, 1);
+    oidcpy(&e->entry.oid, oid);
+    e->dist_a = -1;
+    e->dist_b = -1;
+    oidmap_put(map, e);
+  }
+  return e;
+}
+
+struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
+                                               const struct object_id *target, int max_steps,
+                                               int debug)
+{
+  struct bfs_distance_result result;
+  result.ahead = -1;
+  result.behind = -1;
+  result.commits_visited = 0;
+  oidcpy(&result.ancestor, null_oid(the_repository->hash_algo));
+
+  if (oideq(start, target)) {
+    result.ahead = 0;
+    result.behind = 0;
+    oidcpy(&result.ancestor, start);
+    return result;
+  }
+
+  /* Phase 1: Fast BFS for approximate common ancestor */
+  struct bfs_distance_result approx = bfs_find_distance(start, target, max_steps, debug);
+
+  if (approx.ahead < 0 || approx.behind < 0)
+    return approx;
+
+  struct commit *approx_commit = lookup_commit(the_repository, &approx.ancestor);
+  if (!approx_commit || repo_parse_commit(the_repository, approx_commit))
+    return approx;
+
+  timestamp_t barrier = approx_commit->date - 3600; /* 1 hour safety margin */
+
+  if (debug)
+    fprintf(stderr,
+            "[DEBUG] Phase 1 BFS: ancestor=%s, date=%" PRItime
+            ", barrier=%" PRItime ", visited=%d\n",
+            oid_to_hex(&approx.ancestor), approx_commit->date, barrier,
+            approx.commits_visited);
+
+  /* Phase 2: Timestamp-bounded LCA search */
+  struct prio_queue queue = {compare_commits_by_commit_date};
+  struct oidmap flags_map;
+  oidmap_init(&flags_map, 0);
+  int visited = 0;
+  int budget = max_steps * 20;
+  struct commit *best = NULL;
+
+  struct commit *c_start = lookup_commit(the_repository, start);
+  struct commit *c_target = lookup_commit(the_repository, target);
+  if (!c_start || repo_parse_commit(the_repository, c_start) || !c_target ||
+      repo_parse_commit(the_repository, c_target))
+    goto phase2_done;
+
+  {
+    struct lca_map_entry *ea = lca_get_or_create(&flags_map, start);
+    ea->flags = LCA_SIDE_A;
+    ea->dist_a = 0;
+    struct lca_map_entry *eb = lca_get_or_create(&flags_map, target);
+    eb->flags = LCA_SIDE_B;
+    eb->dist_b = 0;
+  }
+  prio_queue_put(&queue, c_start);
+  prio_queue_put(&queue, c_target);
+
+  while (queue.nr > 0 && visited < budget) {
+    struct commit *c = prio_queue_get(&queue);
+    visited++;
+
+    if (c->date < barrier)
+      break;
+
+    if (best && c->date < best->date)
+      break;
+
+    struct lca_map_entry *e = oidmap_get(&flags_map, &c->object.oid);
+    if (!e)
+      continue;
+
+    unsigned int my_flags = e->flags;
+
+    if ((my_flags & (LCA_SIDE_A | LCA_SIDE_B)) == (LCA_SIDE_A | LCA_SIDE_B)) {
+      if (!best || c->date > best->date) {
+        best = c;
+        result.ahead = e->dist_a;
+        result.behind = e->dist_b;
+      }
+      continue;
+    }
+
+    struct commit_list *parent;
+    for (parent = c->parents; parent; parent = parent->next) {
+      struct commit *p = parent->item;
+      if (repo_parse_commit(the_repository, p))
+        continue;
+
+      struct lca_map_entry *pe = lca_get_or_create(&flags_map, &p->object.oid);
+      unsigned int old_flags = pe->flags;
+      pe->flags |= my_flags;
+
+      if ((my_flags & LCA_SIDE_A) && (pe->dist_a < 0 || e->dist_a + 1 < pe->dist_a))
+        pe->dist_a = e->dist_a + 1;
+      if ((my_flags & LCA_SIDE_B) && (pe->dist_b < 0 || e->dist_b + 1 < pe->dist_b))
+        pe->dist_b = e->dist_b + 1;
+
+      if (pe->flags != old_flags)
+        prio_queue_put(&queue, p);
+    }
+  }
+
+phase2_done:
+  if (debug)
+    fprintf(stderr, "[DEBUG] Phase 2 LCA: visited=%d, best=%s, ahead=%d, behind=%d\n",
+            visited, best ? oid_to_hex(&best->object.oid) : "(none, using Phase 1)",
+            result.ahead, result.behind);
+
+  result.commits_visited = approx.commits_visited + visited;
+
+  if (best) {
+    oidcpy(&result.ancestor, &best->object.oid);
+    /* ahead/behind already set when best was found */
+  } else {
+    result = approx;
+    result.commits_visited = approx.commits_visited + visited;
+  }
+
+  clear_prio_queue(&queue);
+  {
+    struct oidmap_iter iter;
+    struct lca_map_entry *entry;
+    oidmap_iter_init(&flags_map, &iter);
+    while ((entry = oidmap_iter_next(&iter)))
+      free(entry);
+    oidmap_clear(&flags_map, 0);
+  }
 
   return result;
 }

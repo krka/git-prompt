@@ -204,7 +204,18 @@ static const char prompt_help[] =
   "\n"
   "  Examples:\n"
   "    git prompt distance --from=HEAD --to=origin/main\n"
-  "    git prompt distance --from=feature --to=main\n";
+  "    git prompt distance --from=feature --to=main\n"
+  "\n"
+  "MERGE-BASE SUBCOMMAND:\n"
+  "  git prompt merge-base --from=<commit> --to=<commit>\n"
+  "\n"
+  "  Fast approximate merge-base using bidirectional BFS.\n"
+  "  Outputs the common ancestor commit hash. Much faster than git merge-base\n"
+  "  on merge-heavy repositories, but may return a non-optimal ancestor.\n"
+  "\n"
+  "  Examples:\n"
+  "    git prompt merge-base --from=HEAD --to=origin/main\n"
+  "    git prompt merge-base --from=feature --to=main\n";
 
 static void show_help(void)
 {
@@ -1300,6 +1311,37 @@ int main(int argc, const char **argv)
   /* Start timing after options are parsed */
   if (debug_mode) {
     gettimeofday(&tv_start_total, NULL);
+  }
+
+  /* Handle merge-base subcommand */
+  if (argc > 0 && !strcmp(argv[0], "merge-base")) {
+    struct object_id from_oid, to_oid;
+
+    if (!from_commit || !to_commit) {
+      fprintf(stderr, "error: merge-base subcommand requires --from and --to arguments\n");
+      usage_with_options(prompt_usage, options);
+    }
+
+    if (repo_get_oid(the_repository, from_commit, &from_oid)) {
+      fprintf(stderr, "error: cannot resolve --from commit: %s\n", from_commit);
+      return 1;
+    }
+
+    if (repo_get_oid(the_repository, to_commit, &to_oid)) {
+      fprintf(stderr, "error: cannot resolve --to commit: %s\n", to_commit);
+      return 1;
+    }
+
+    struct bfs_distance_result result =
+      bfs_find_merge_base(&from_oid, &to_oid, max_traversal, debug_mode);
+
+    if (result.ahead < 0 || result.behind < 0) {
+      fprintf(stderr, "error: no common ancestor found within %d commits\n", max_traversal);
+      return 1;
+    }
+
+    printf("%s\n", oid_to_hex(&result.ancestor));
+    return 0;
   }
 
   /* Handle distance subcommand */

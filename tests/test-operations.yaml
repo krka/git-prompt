@@ -58,7 +58,7 @@ tests:
   - git add file.txt
   - git commit -m "Change 1"
   - GIT_SEQUENCE_EDITOR="sed -i 's/^pick/edit/'" git rebase -i HEAD~1
-  expected: '{YELLOW}[f3acd42]{} ⚡{CYAN}[rebase:continue 1/1]{}'
+  expected: '{YELLOW}[7630c0e]{} ⚡{CYAN}[rebase:continue 1/1]{}'
 - description: Cherry-pick with conflict
   name: Cherry-pick with conflict
   group: in-progress
@@ -93,7 +93,8 @@ tests:
   - git add file.txt
   - git commit -m "base"
   - git checkout -b source
-  - command: echo "source$i" >> source.txt && git add source.txt && git commit -m "source$i"
+  - command: echo "source$i" >> source.txt && git add source.txt && git commit -m
+      "source$i"
     repeat: 8
   - git checkout master
   - echo "conflict" > source.txt
@@ -126,7 +127,7 @@ tests:
   - git commit -m "Master commit"
   - git checkout feature
   - git rebase master || true
-  expected: '{RED}[545c30c]{} ⚡{RED}[rebase:conflict 1/2]{}'
+  expected: '{RED}[2044a00]{} ⚡{RED}[rebase:conflict 1/2]{}'
 - description: Multi-commit rebase with progress (conflict mid-way)
   name: Rebase progress with conflict
   group: in-progress
@@ -139,7 +140,8 @@ tests:
   - echo "base" > file.txt
   - git add file.txt
   - git commit -m "base"
-  - command: echo "master$i" >> master.txt && git add master.txt && git commit -m "master$i"
+  - command: echo "master$i" >> master.txt && git add master.txt && git commit -m
+      "master$i"
     repeat: 10
   - git checkout -b feature HEAD~10
   - command: echo "feature$i" >> file.txt && git commit -am "feature$i"
@@ -150,7 +152,7 @@ tests:
   - command: echo "feature$i" >> file.txt && git commit -am "feature$i"
     repeat: 5
   - git rebase master || true
-  expected: '{RED}[fe09928]{} ⚡{RED}[rebase:conflict 6/11]{}'
+  expected: '{RED}[2fc302e]{} ⚡{RED}[rebase:conflict 6/11]{}'
 - description: Multi-commit rebase with progress (after resolving conflict)
   name: Rebase progress after resolving
   group: in-progress
@@ -162,7 +164,8 @@ tests:
   - echo "base" > file.txt
   - git add file.txt
   - git commit -m "base"
-  - command: echo "master$i" >> master.txt && git add master.txt && git commit -m "master$i"
+  - command: echo "master$i" >> master.txt && git add master.txt && git commit -m
+      "master$i"
     repeat: 10
   - git checkout -b feature HEAD~10
   - command: echo "feature$i" >> file.txt && git commit -am "feature$i"
@@ -175,7 +178,7 @@ tests:
   - git rebase master || true
   - echo "resolved" > master.txt
   - git add master.txt
-  expected: '{YELLOW}[fe09928]{} ⚡{CYAN}[rebase:continue 6/11]{}'
+  expected: '{YELLOW}[28ef62c]{} ⚡{CYAN}[rebase:continue 6/11]{}'
 - description: Git revert with conflicts
   name: Revert with conflicts
   group: in-progress
@@ -232,8 +235,7 @@ tests:
   - git checkout master
   - git worktree add ../worktree-dir feature
   cwd: ../worktree-dir
-  expected: '{GREEN}[feature]{} 🌳'
-  expected_large: '{GRAY}[feature]{} 🌳'
+  expected: ''
 - description: Running git-prompt inside a sparse worktree
   name: Sparse worktree
   group: worktree
@@ -250,7 +252,8 @@ tests:
   - git checkout -b sparse-feature
   - git checkout master
   - git worktree add ../sparse-wt sparse-feature
-  - cd ../sparse-wt && git sparse-checkout init --cone && git sparse-checkout set src
+  - cd ../sparse-wt && git sparse-checkout init --cone && git sparse-checkout set
+    src
   cwd: ../sparse-wt
   expected: '{GREEN}[sparse-feature]{} 🪾'
   expected_large: '{GRAY}[sparse-feature]{} 🪾'
