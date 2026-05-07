@@ -992,9 +992,14 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
             test_failed_during_setup = False
 
             # Reset to fresh directory if requested
+            # Clean entire tmpdir (including sibling dirs like worktree-dir)
             if reset:
-                if os.path.exists(test_dir):
-                    shutil.rmtree(test_dir)
+                for entry in os.listdir(tmpdir):
+                    entry_path = os.path.join(tmpdir, entry)
+                    if os.path.isdir(entry_path):
+                        shutil.rmtree(entry_path)
+                    else:
+                        os.remove(entry_path)
                 os.makedirs(test_dir)
 
             # Get max_traversal from test (for tests that override it)

@@ -252,8 +252,8 @@ tests:
   - git worktree add ../sparse-wt sparse-feature
   - cd ../sparse-wt && git sparse-checkout init --cone && git sparse-checkout set src
   cwd: ../sparse-wt
-  expected: '{GREEN}[sparse-feature]{} 🪾 '
-  expected_large: '{GRAY}[sparse-feature]{} 🪾 '
+  expected: '{GREEN}[sparse-feature]{} 🪾'
+  expected_large: '{GRAY}[sparse-feature]{} 🪾'
 - description: Git am (apply mailbox) clean apply
   name: Git am clean apply
   group: am
