@@ -235,7 +235,8 @@ tests:
   - git checkout master
   - git worktree add ../worktree-dir feature
   cwd: ../worktree-dir
-  expected: ''
+  expected: '{GREEN}[feature]{} 🌳'
+  expected_large: '{GRAY}[feature]{} 🌳'
 - description: Running git-prompt inside a sparse worktree
   name: Sparse worktree
   group: worktree
