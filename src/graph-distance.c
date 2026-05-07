@@ -316,7 +316,11 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
   if (!approx_commit || repo_parse_commit(the_repository, approx_commit))
     return approx;
 
-  timestamp_t barrier = approx_commit->date - 3600; /* 1 hour safety margin */
+  /* Phase 2 won't explore commits older than this. The 1-hour margin
+   * accounts for minor timestamp skew; severely misordered timestamps
+   * (>1h) may cause Phase 2 to miss the true LCA and fall back to
+   * Phase 1's result. */
+  timestamp_t barrier = approx_commit->date - 3600;
 
   if (debug)
     fprintf(stderr,
