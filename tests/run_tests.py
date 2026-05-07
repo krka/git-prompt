@@ -1067,6 +1067,10 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
                         else:
                             expected_val = expect_small
 
+                        if isinstance(expect_spec, dict) and expect_spec.get('sorted', False):
+                            actual = '\n'.join(sorted(actual.split('\n')))
+                            expected_val = '\n'.join(sorted(expected_val.split('\n')))
+
                         expect_passed = match_output(actual, expected_val)
                         inline_expect_results.append({
                             'mode': 'subcommand',

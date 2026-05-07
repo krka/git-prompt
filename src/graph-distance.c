@@ -14,7 +14,7 @@
 #include "prio-queue.h"
 #include <stdio.h>
 
-#define BFS_QUEUE_SIZE 2048 /* Power of 2 for fast modulo via bitwise AND */
+#define BFS_INITIAL_QUEUE_CAPACITY 256
 
 /*
  * BFS node tracking during graph traversal (ring buffer entry).
@@ -25,15 +25,31 @@ struct bfs_node {
 };
 
 /*
- * BFS state for one side of bidirectional search (stack-allocated).
+ * BFS state for one side of bidirectional search.
  */
 struct bfs_state {
-  struct bfs_node queue[BFS_QUEUE_SIZE]; /* Ring buffer for this side */
-  int head;                              /* Queue head index */
-  int tail;                              /* Queue tail index */
-  int size;                              /* Current queue size */
-  int steps_remaining;                   /* Budget remaining for this side */
+  struct bfs_node *queue;
+  int capacity;        /* Always a power of 2 */
+  int mask;            /* capacity - 1, for fast modulo */
+  int head;
+  int tail;
+  int size;
+  int steps_remaining;
 };
+
+static void bfs_queue_grow(struct bfs_state *state)
+{
+  int old_cap = state->capacity;
+  int new_cap = old_cap * 2;
+  state->queue = xrealloc(state->queue, new_cap * sizeof(*state->queue));
+  if (state->tail <= state->head) {
+    memcpy(state->queue + old_cap, state->queue,
+           state->tail * sizeof(*state->queue));
+    state->tail += old_cap;
+  }
+  state->capacity = new_cap;
+  state->mask = new_cap - 1;
+}
 
 /*
  * Entry for storing distances in oidmap during interleaved bidirectional BFS.
@@ -77,10 +93,6 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
   result.commits_visited = 0;
   oidcpy(&result.ancestor, null_oid(the_repository->hash_algo));
 
-  /* Two BFS states: [0]=start side, [1]=target side (stack-allocated) */
-  struct bfs_state states[2] = {{.head = 0, .tail = 0, .size = 0, .steps_remaining = max_steps},
-                                {.head = 0, .tail = 0, .size = 0, .steps_remaining = max_steps}};
-
   const struct object_id *initial_oids[2];
   int commits_visited = 0;
   int side;
@@ -102,6 +114,18 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
     result.commits_visited = 0; /* Cache hit - no traversal needed */
     oidcpy(&result.ancestor, &cached.ancestor);
     return result;
+  }
+
+  /* Initialize BFS queues (after early returns to avoid leaking on fast paths) */
+  struct bfs_state states[2];
+  for (int i = 0; i < 2; i++) {
+    states[i].queue = xmalloc(BFS_INITIAL_QUEUE_CAPACITY * sizeof(struct bfs_node));
+    states[i].capacity = BFS_INITIAL_QUEUE_CAPACITY;
+    states[i].mask = BFS_INITIAL_QUEUE_CAPACITY - 1;
+    states[i].head = 0;
+    states[i].tail = 0;
+    states[i].size = 0;
+    states[i].steps_remaining = max_steps;
   }
 
   /* Initialize distance map */
@@ -128,7 +152,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 
       oidcpy(&state->queue[state->tail].oid, initial_oids[side]);
       state->queue[state->tail].distance = 0;
-      state->tail = (state->tail + 1) & (BFS_QUEUE_SIZE - 1);
+      state->tail = (state->tail + 1) & state->mask;
       state->size++;
     }
   }
@@ -149,7 +173,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 
       /* Dequeue from this side */
       struct bfs_node current = state->queue[state->head];
-      state->head = (state->head + 1) & (BFS_QUEUE_SIZE - 1);
+      state->head = (state->head + 1) & state->mask;
       state->size--;
       commits_visited++;
 
@@ -216,12 +240,11 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 
             /* Enqueue for further exploration if budget allows */
             if (state->steps_remaining > 0) {
-              if (state->size >= BFS_QUEUE_SIZE - 1) {
-                goto cleanup;
-              }
+              if (state->size >= state->capacity)
+                bfs_queue_grow(state);
               oidcpy(&state->queue[state->tail].oid, parent_oid);
               state->queue[state->tail].distance = parent_dist;
-              state->tail = (state->tail + 1) & (BFS_QUEUE_SIZE - 1);
+              state->tail = (state->tail + 1) & state->mask;
               state->size++;
               state->steps_remaining--;
             }
@@ -249,6 +272,10 @@ cleanup:
   /* Write result to cache (write function decides if expensive enough) */
   write_distance_cache(start, target, result.ahead, result.behind, &result.ancestor,
                        commits_visited, debug);
+
+  /* Free queues */
+  free(states[0].queue);
+  free(states[1].queue);
 
   /* Free hashmap entries */
   struct oidmap_iter iter;
@@ -292,7 +319,8 @@ static struct lca_map_entry *lca_get_or_create(struct oidmap *map,
 
 struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
                                                const struct object_id *target, int max_steps,
-                                               int debug)
+                                               int debug,
+                                               const struct oidset *exclude)
 {
   struct bfs_distance_result result;
   result.ahead = -1;
@@ -369,12 +397,15 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
     unsigned int my_flags = e->flags;
 
     if ((my_flags & (LCA_SIDE_A | LCA_SIDE_B)) == (LCA_SIDE_A | LCA_SIDE_B)) {
-      if (!best || c->date > best->date) {
-        best = c;
-        result.ahead = e->dist_a;
-        result.behind = e->dist_b;
+      if (!exclude || !oidset_contains(exclude, &c->object.oid)) {
+        if (!best || c->date > best->date) {
+          best = c;
+          result.ahead = e->dist_a;
+          result.behind = e->dist_b;
+        }
+        continue;
       }
-      continue;
+      continue; /* Excluded LCA: don't propagate — ancestors of an LCA are not LCAs */
     }
 
     struct commit_list *parent;
@@ -408,6 +439,11 @@ phase2_done:
   if (best) {
     oidcpy(&result.ancestor, &best->object.oid);
     /* ahead/behind already set when best was found */
+  } else if (exclude) {
+    /* Phase 2 found no non-excluded LCA; don't fall back to Phase 1's
+     * approximation since it's not guaranteed to be a true LCA. */
+    result.ahead = -1;
+    result.behind = -1;
   } else {
     result = approx;
     result.commits_visited = approx.commits_visited + visited;

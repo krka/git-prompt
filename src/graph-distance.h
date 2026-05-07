@@ -3,6 +3,7 @@
 
 #include "git-compat-util.h"
 #include "commit.h"
+#include "oidset.h"
 
 /*
  * Result of bidirectional BFS distance calculation.
@@ -89,6 +90,7 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
  */
 struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
                                                const struct object_id *target, int max_steps,
-                                               int debug);
+                                               int debug,
+                                               const struct oidset *exclude);
 
 #endif /* GRAPH_DISTANCE_H */

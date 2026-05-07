@@ -60,7 +60,6 @@
 #define LARGE_REPO_INDEX_SIZE 5000000 /* 5MB */
 #define MAX_TRAVERSAL_DEFAULT                                                                      \
   1000                      /* Default traversal limit per phase (balances accuracy vs speed) */
-#define BFS_QUEUE_SIZE 2048 /* Power of 2 for fast modulo via bitwise AND */
 
 /*
  * PERFORMANCE ANALYSIS: Function Complexity and Large Repo Mode Safety
@@ -1259,6 +1258,8 @@ int main(int argc, const char **argv)
   struct timeval tv_start_total, tv_end_total;
   int no_color = 0;
   int nongit_ok = 0;
+  int merge_base_count = 1;
+  int merge_base_all = 0;
   const char *from_commit = NULL;
   const char *to_commit = NULL;
   const struct option options[] = {
@@ -1271,6 +1272,9 @@ int main(int argc, const char **argv)
     OPT_BOOL(0, "local", &local_mode, "skip reading global git config"),
     OPT_STRING(0, "from", &from_commit, "commit", "start commit for distance calculation"),
     OPT_STRING(0, "to", &to_commit, "commit", "target commit for distance calculation"),
+    OPT_INTEGER(0, "count", &merge_base_count,
+                "number of merge-bases to find (default: 1)"),
+    OPT_BOOL(0, "all", &merge_base_all, "find all merge-bases"),
     OPT_END()};
   struct strbuf branch = STRBUF_INIT;
   struct strbuf indicators = STRBUF_INIT;
@@ -1335,15 +1339,36 @@ int main(int argc, const char **argv)
       return 1;
     }
 
-    struct bfs_distance_result result =
-      bfs_find_merge_base(&from_oid, &to_oid, max_traversal, debug_mode);
+    if (merge_base_all)
+      merge_base_count = 1000;
+    else if (merge_base_count < 1)
+      merge_base_count = 1;
 
-    if (result.ahead < 0 || result.behind < 0) {
+    struct oidset found = OIDSET_INIT;
+    int found_any = 0;
+
+    for (int i = 0; i < merge_base_count; i++) {
+      struct bfs_distance_result result =
+        bfs_find_merge_base(&from_oid, &to_oid, max_traversal, debug_mode,
+                            i > 0 ? &found : NULL);
+
+      if (result.ahead < 0 || result.behind < 0)
+        break;
+
+      if (oidset_contains(&found, &result.ancestor))
+        break;
+
+      printf("%s\n", oid_to_hex(&result.ancestor));
+      oidset_insert(&found, &result.ancestor);
+      found_any = 1;
+    }
+
+    oidset_clear(&found);
+
+    if (!found_any) {
       fprintf(stderr, "error: no common ancestor found within %d commits\n", max_traversal);
       return 1;
     }
-
-    printf("%s\n", oid_to_hex(&result.ancestor));
     return 0;
   }
 

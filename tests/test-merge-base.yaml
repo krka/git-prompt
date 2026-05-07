@@ -123,6 +123,39 @@ tests:
   - expect:
       command: merge-base --from=deep-1 --to=deep-3 --max-traversal=5000
       match_cmd: git merge-base deep-1 deep-3
+- name: "Criss-cross merge (multiple merge-bases)"
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  # Create base commit
+  - echo base > f.txt && git add f.txt && git commit -q -m "base"
+  # Two branches diverge from base
+  - git checkout -q -b branch-a
+  - echo a1 > a.txt && git add a.txt && git commit -q -m "a1"
+  - git checkout -q master
+  - git checkout -q -b branch-b
+  - echo b1 > b.txt && git add b.txt && git commit -q -m "b1"
+  # Save tips before cross-merging (each merge only sees original commits)
+  - git rev-parse branch-a > .tip-a && git rev-parse branch-b > .tip-b
+  - git checkout -q branch-a && git merge -q --no-edit $(cat .tip-b)
+  - git checkout -q branch-b && git merge -q --no-edit $(cat .tip-a)
+  # Add more commits on each side after the cross-merges
+  - git checkout -q branch-a
+  - echo a2 > a2.txt && git add a2.txt && git commit -q -m "a2"
+  - git checkout -q branch-b
+  - echo b2 > b2.txt && git add b2.txt && git commit -q -m "b2"
+  # Single merge-base should match git
+  - expect:
+      command: merge-base --from=branch-a --to=branch-b --max-traversal=5000
+      match_cmd: git merge-base branch-a branch-b
+  # --all should find both merge-bases (same as git merge-base --all)
+  - expect:
+      command: merge-base --from=branch-a --to=branch-b --max-traversal=5000 --all
+      match_cmd: git merge-base --all branch-a branch-b
+      sorted: true
 - name: Branch with merge-from-master
   group: merge-base
   reset: true
@@ -141,3 +174,21 @@ tests:
   - expect:
       command: merge-base --from=master --to=feature --max-traversal=5000
       match_cmd: git merge-base master feature
+- name: "Wide frontier: octopus merge triggers queue growth"
+  group: merge-base
+  reset: true
+  steps:
+  - git init -q
+  - git config user.name "Test"
+  - git config user.email "t@t.com"
+  - echo base > f.txt && git add f.txt && git commit -q -m "base"
+  - git tag base
+  - command: N=$(cat .n 2>/dev/null || echo 0) && echo $((N+1)) > .n && git checkout -q -b "br-$N" base && echo "$N" > "f$N" && git add "f$N" && git commit -q -m "b$N"
+    repeat: 300
+  - git checkout -q master
+  - "git merge -q --no-edit $(git for-each-ref --format='%(refname:short)' 'refs/heads/br-*')"
+  - git checkout -q -b other base
+  - echo other > other.txt && git add other.txt && git commit -q -m "other"
+  - expect:
+      command: merge-base --from=master --to=other --max-traversal=5000
+      match_cmd: git merge-base master other
