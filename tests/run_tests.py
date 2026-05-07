@@ -1374,11 +1374,32 @@ def main():
             suite_name = "Core Tests"
         suites_results.append((suite_name, test_results))
 
+    # Print overall summary across all suites
+    if len(test_files) > 1:
+        total_passed = sum(sum(1 for r in results if r['passed']) for _, results in suites_results)
+        total_tests = sum(len(results) for _, results in suites_results)
+        total_failed = total_tests - total_passed
+
+        print(f"\n{Colors.BOLD}{'='*60}{Colors.RESET}")
+        print(f"{Colors.BOLD}Overall Summary{Colors.RESET}")
+        print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+        for suite_name, results in suites_results:
+            suite_passed = sum(1 for r in results if r['passed'])
+            suite_total = len(results)
+            if suite_passed == suite_total:
+                print(f"  {Colors.GREEN}✓{Colors.RESET} {suite_name}: {suite_passed}/{suite_total}")
+            else:
+                print(f"  {Colors.RED}✗{Colors.RESET} {suite_name}: {suite_passed}/{suite_total}")
+        print()
+        if total_failed == 0:
+            print(f"{Colors.GREEN}{Colors.BOLD}All {total_tests} tests passed across {len(test_files)} suites{Colors.RESET}")
+        else:
+            print(f"{Colors.RED}{Colors.BOLD}{total_passed} passed, {total_failed} failed across {len(test_files)} suites{Colors.RESET}")
+        print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+
     # Generate unified reports if multiple test files
     if len(test_files) > 1:
-        print(f"\n{Colors.BOLD}{'='*60}{Colors.RESET}")
-        print(f"{Colors.BOLD}Generating unified reports...{Colors.RESET}")
-        print(f"{Colors.BOLD}{'='*60}{Colors.RESET}\n")
+        print(f"\n{Colors.BOLD}Generating reports...{Colors.RESET}")
 
         # Combine all test results for examples report
         all_test_results = []
