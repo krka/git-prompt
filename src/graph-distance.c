@@ -262,9 +262,10 @@ cleanup:
   return result;
 }
 
-/*
- * Phase 2 helper: oidmap entry tracking which sides have reached a commit.
- */
+/* Phase 2: timestamp safety margin. The true LCA is missed only if a
+ * timestamp inversion on the traversed path exceeds this value. */
+#define BARRIER_MARGIN 3600
+
 #define LCA_SIDE_A (1u << 0)
 #define LCA_SIDE_B (1u << 1)
 
@@ -316,11 +317,8 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
   if (!approx_commit || repo_parse_commit(the_repository, approx_commit))
     return approx;
 
-  /* Phase 2 won't explore commits older than this. The 1-hour margin
-   * accounts for minor timestamp skew; severely misordered timestamps
-   * (>1h) may cause Phase 2 to miss the true LCA and fall back to
-   * Phase 1's result. */
-  timestamp_t barrier = approx_commit->date - 3600;
+  /* Phase 2 won't explore commits older than this. See BARRIER_MARGIN. */
+  timestamp_t barrier = approx_commit->date - BARRIER_MARGIN;
 
   if (debug)
     fprintf(stderr,

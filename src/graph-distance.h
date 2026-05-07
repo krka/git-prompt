@@ -46,26 +46,44 @@ struct bfs_distance_result bfs_find_distance(const struct object_id *start,
 /*
  * Two-phase merge-base finder.
  *
- * Phase 1: Bidirectional BFS finds a valid common ancestor quickly.
- *          May overshoot on merge-heavy DAGs (finds *a* common ancestor,
- *          not necessarily the best one).
+ * Algorithm:
  *
- * Phase 2: Priority-queue LCA search (newest-first by committer timestamp).
- *          Explores commits from both sides, looking for the most recent
- *          common ancestor. Stops when timestamps drop below Phase 1's
- *          ancestor timestamp minus a 1-hour safety margin.
+ *   Phase 1 — Bidirectional BFS (same as bfs_find_distance).
+ *     Finds *a* common ancestor quickly by growing BFS waves from both
+ *     sides until they intersect. On merge-heavy DAGs the intersection
+ *     may not be the lowest common ancestor (LCA): BFS minimizes total
+ *     edge count, not topological recency.
  *
- * Limitations:
- *   - If max_steps is too low for Phase 1 to find any common ancestor,
- *     returns {-1, -1, null_oid} (no result).
- *   - If committer timestamps are severely out of order (by more than
- *     1 hour), the timestamp barrier may prune the true LCA and Phase 2
- *     falls back to Phase 1's approximation.
- *   - Phase 2 budget is max_steps * 20; if exhausted, uses the best
- *     ancestor found so far (which may be Phase 1's result).
+ *   Phase 2 — Timestamp-bounded LCA refinement.
+ *     Uses a priority queue ordered by committer timestamp (newest first)
+ *     and paints commits with SIDE_A / SIDE_B flags. When a commit is
+ *     painted from both sides it is a common ancestor; the most recent
+ *     one found is kept as `best`. The search stops when:
+ *       (a) all remaining commits are older than `best`, or
+ *       (b) all remaining commits are older than the timestamp barrier
+ *           (Phase 1 ancestor date minus BARRIER_MARGIN), or
+ *       (c) the visit budget (max_steps * 20) is exhausted.
+ *     If Phase 2 finds no better ancestor, the Phase 1 result is used.
+ *
+ * Correctness:
+ *   The result is the true LCA provided:
+ *     date(true LCA) >= date(Phase 1 ancestor) - BARRIER_MARGIN
+ *   Phase 1 typically finds an ancestor at least as old as the LCA
+ *   (BFS overshoots deeper), so the barrier is usually permissive.
+ *   The only failure mode is a timestamp inversion on the path between
+ *   the Phase 1 result and the true LCA that exceeds BARRIER_MARGIN.
+ *   In that case a valid but non-optimal common ancestor is returned.
+ *
+ * Failure modes:
+ *   - max_steps too low: Phase 1 finds no common ancestor at all.
+ *     Returns {-1, -1, null_oid}.
+ *   - Timestamp inversion > BARRIER_MARGIN on the critical path:
+ *     Phase 2 misses the true LCA, returns Phase 1's approximation.
+ *     The result is still a valid common ancestor, just not optimal.
+ *   - Phase 2 budget exhausted: uses best ancestor found so far.
  *
  * Returns:
- *   - ancestor: best common ancestor found (exact in typical repos)
+ *   - ancestor: best common ancestor found
  *   - ahead/behind: shortest distance from start/target to ancestor
  *   - commits_visited: total across both phases
  */
