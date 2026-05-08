@@ -289,10 +289,6 @@ cleanup:
   return result;
 }
 
-/* Phase 2: timestamp safety margin. The true LCA is missed only if a
- * timestamp inversion on the traversed path exceeds this value. */
-#define BARRIER_MARGIN 3600
-
 #define LCA_SIDE_A (1u << 0)
 #define LCA_SIDE_B (1u << 1)
 
@@ -335,39 +331,25 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
     return result;
   }
 
-  /* Phase 1: Fast BFS for approximate common ancestor */
-  struct bfs_distance_result approx = bfs_find_distance(start, target, max_steps, debug);
-
-  if (approx.ahead < 0 || approx.behind < 0)
-    return approx;
-
-  struct commit *approx_commit = lookup_commit(the_repository, &approx.ancestor);
-  if (!approx_commit || repo_parse_commit(the_repository, approx_commit))
-    return approx;
-
-  /* Phase 2 won't explore commits older than this. See BARRIER_MARGIN. */
-  timestamp_t barrier = approx_commit->date - BARRIER_MARGIN;
-
-  if (debug)
-    fprintf(stderr,
-            "[DEBUG] Phase 1 BFS: ancestor=%s, date=%" PRItime
-            ", barrier=%" PRItime ", visited=%d\n",
-            oid_to_hex(&approx.ancestor), approx_commit->date, barrier,
-            approx.commits_visited);
-
-  /* Phase 2: Timestamp-bounded LCA search */
+  /*
+   * Single-pass priority-queue merge-base: seed both tips into a max-heap
+   * ordered by commit date, paint parents with side flags, first
+   * doubly-painted commit is the best (most recent) merge-base.
+   *
+   * With max=1, we can stop immediately — the max-heap guarantees no
+   * higher common ancestor exists.
+   */
   struct prio_queue queue = {compare_commits_by_commit_date};
   struct oidmap flags_map;
   oidmap_init(&flags_map, 0);
   int visited = 0;
-  int budget = max_steps * 20;
-  struct commit *best = NULL;
+  int budget = max_steps;
 
   struct commit *c_start = lookup_commit(the_repository, start);
   struct commit *c_target = lookup_commit(the_repository, target);
   if (!c_start || repo_parse_commit(the_repository, c_start) || !c_target ||
       repo_parse_commit(the_repository, c_target))
-    goto phase2_done;
+    goto done;
 
   {
     struct lca_map_entry *ea = lca_get_or_create(&flags_map, start);
@@ -384,12 +366,6 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
     struct commit *c = prio_queue_get(&queue);
     visited++;
 
-    if (c->date < barrier)
-      break;
-
-    if (best && c->date < best->date)
-      break;
-
     struct lca_map_entry *e = oidmap_get(&flags_map, &c->object.oid);
     if (!e)
       continue;
@@ -398,14 +374,19 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
 
     if ((my_flags & (LCA_SIDE_A | LCA_SIDE_B)) == (LCA_SIDE_A | LCA_SIDE_B)) {
       if (!exclude || !oidset_contains(exclude, &c->object.oid)) {
-        if (!best || c->date > best->date) {
-          best = c;
-          result.ahead = e->dist_a;
-          result.behind = e->dist_b;
-        }
-        continue;
+        result.ahead = e->dist_a;
+        result.behind = e->dist_b;
+        oidcpy(&result.ancestor, &c->object.oid);
+        if (debug)
+          fprintf(stderr,
+                  "[DEBUG] PQ merge-base: found %s after %d commits, "
+                  "ahead=%d, behind=%d\n",
+                  oid_to_hex(&c->object.oid), visited,
+                  result.ahead, result.behind);
+        goto done;
       }
-      continue; /* Excluded LCA: don't propagate — ancestors of an LCA are not LCAs */
+      /* Excluded: don't propagate — ancestors of an LCA are not LCAs */
+      continue;
     }
 
     struct commit_list *parent;
@@ -428,26 +409,11 @@ struct bfs_distance_result bfs_find_merge_base(const struct object_id *start,
     }
   }
 
-phase2_done:
-  if (debug)
-    fprintf(stderr, "[DEBUG] Phase 2 LCA: visited=%d, best=%s, ahead=%d, behind=%d\n",
-            visited, best ? oid_to_hex(&best->object.oid) : "(none, using Phase 1)",
-            result.ahead, result.behind);
+done:
+  if (debug && result.ahead < 0)
+    fprintf(stderr, "[DEBUG] PQ merge-base: exhausted budget (%d commits)\n", visited);
 
-  result.commits_visited = approx.commits_visited + visited;
-
-  if (best) {
-    oidcpy(&result.ancestor, &best->object.oid);
-    /* ahead/behind already set when best was found */
-  } else if (exclude) {
-    /* Phase 2 found no non-excluded LCA; don't fall back to Phase 1's
-     * approximation since it's not guaranteed to be a true LCA. */
-    result.ahead = -1;
-    result.behind = -1;
-  } else {
-    result = approx;
-    result.commits_visited = approx.commits_visited + visited;
-  }
+  result.commits_visited = visited;
 
   clear_prio_queue(&queue);
   {
