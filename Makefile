@@ -38,8 +38,6 @@ GIT_CFLAGS = -I$(SUBMODULE_DIR)
 
 # Source files
 SRC = src/git-prompt.c
-SRC_GRAPH = src/graph-distance.c
-SRC_CACHE = src/graph-distance-cache.c
 
 # Core binaries (always built)
 EXECUTABLE = $(TARGET_DIR)/git-prompt                          # Patched, stripped, optimized (shipping)
@@ -47,9 +45,9 @@ EXECUTABLE_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched       # Raw baseline (
 EXECUTABLE_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug  # Patched with debug (analysis)
 
 # Object files
-OBJ_MAIN = $(TARGET_DIR)/git-prompt.o $(TARGET_DIR)/graph-distance.o $(TARGET_DIR)/graph-distance-cache.o
-OBJ_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched.o $(TARGET_DIR)/graph-distance-unpatched.o $(TARGET_DIR)/graph-distance-cache-unpatched.o
-OBJ_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug.o $(TARGET_DIR)/graph-distance-patched-debug.o $(TARGET_DIR)/graph-distance-cache-patched-debug.o
+OBJ_MAIN = $(TARGET_DIR)/git-prompt.o
+OBJ_UNPATCHED = $(TARGET_DIR)/git-prompt-unpatched.o
+OBJ_PATCHED_DEBUG = $(TARGET_DIR)/git-prompt-patched-debug.o
 
 # Build flags for unpatched (baseline reference)
 CFLAGS_UNPATCHED = -g -O2 -Wall
@@ -65,12 +63,12 @@ LDFLAGS_PATCHED_DEBUG = -Wl,--gc-sections -Wl,-O2 -flto
 
 # Sanitizer binaries (for testing)
 EXECUTABLE_ASAN = $(TARGET_DIR)/git-prompt-asan
-OBJ_ASAN = $(TARGET_DIR)/git-prompt-asan.o $(TARGET_DIR)/graph-distance-asan.o $(TARGET_DIR)/graph-distance-cache-asan.o
+OBJ_ASAN = $(TARGET_DIR)/git-prompt-asan.o
 CFLAGS_ASAN = -g -O1 -Wall -fsanitize=address -fno-omit-frame-pointer
 LDFLAGS_ASAN = -fsanitize=address
 
 EXECUTABLE_UBSAN = $(TARGET_DIR)/git-prompt-ubsan
-OBJ_UBSAN = $(TARGET_DIR)/git-prompt-ubsan.o $(TARGET_DIR)/graph-distance-ubsan.o $(TARGET_DIR)/graph-distance-cache-ubsan.o
+OBJ_UBSAN = $(TARGET_DIR)/git-prompt-ubsan.o
 CFLAGS_UBSAN = -g -O1 -Wall -fsanitize=undefined -fno-omit-frame-pointer
 LDFLAGS_UBSAN = -fsanitize=undefined
 
@@ -191,7 +189,7 @@ $(GIT_RAW_LIB): $(SUBMODULE_MARKER)
 	@echo "Building raw Git libraries (unpatched)..."
 	@mkdir -p $(GIT_RAW_DIR)
 	@./tools/git-cleanup.sh  # Ensure pristine state before building
-	@$(MAKE) -C $(SUBMODULE_DIR) CFLAGS="$(CFLAGS_UNPATCHED)" \
+	@$(MAKE) -C $(SUBMODULE_DIR) NO_RUST=1 CFLAGS="$(CFLAGS_UNPATCHED)" \
 		libgit.a xdiff/lib.a reftable/libreftable.a
 	@cp $(SUBMODULE_DIR)/libgit.a $(GIT_RAW_LIB)
 	@cp $(SUBMODULE_DIR)/xdiff/lib.a $(GIT_RAW_XDIFF)
@@ -212,6 +210,7 @@ $(GIT_PATCHED_LIB): $(SUBMODULE_MARKER) tools/patches.yaml tools/apply-patches.p
 	@./tools/git-cleanup.sh  # Ensure pristine state before patching
 	@./tools/apply-patches.py
 	@$(MAKE) -C $(SUBMODULE_DIR) \
+		NO_RUST=1 \
 		CC=gcc \
 		AR=gcc-ar \
 		RANLIB=gcc-ranlib \
@@ -237,12 +236,6 @@ $(TARGET_DIR):
 $(TARGET_DIR)/git-prompt-unpatched.o: $(SRC) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-distance-unpatched.o: $(SRC_GRAPH) | $(TARGET_DIR)
-	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-cache-unpatched.o: $(SRC_CACHE) | $(TARGET_DIR)
-	$(CC) $(CFLAGS_UNPATCHED) $(GIT_CFLAGS) -c -o $@ $<
-
 $(EXECUTABLE_UNPATCHED): $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
 	$(CC) $(LDFLAGS_UNPATCHED) -o $@ $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
 
@@ -253,22 +246,10 @@ $(EXECUTABLE_UNPATCHED): $(OBJ_UNPATCHED) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_
 $(TARGET_DIR)/git-prompt.o: $(SRC) | $(TARGET_DIR)
 	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-distance.o: $(SRC_GRAPH) | $(TARGET_DIR)
-	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-cache.o: $(SRC_CACHE) | $(TARGET_DIR)
-	gcc $(CFLAGS_MAIN) $(GIT_CFLAGS) -c -o $@ $<
-
 $(EXECUTABLE): $(OBJ_MAIN) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE)
 	gcc $(LDFLAGS_MAIN) -o $@ $(OBJ_MAIN) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE) $(LIBS)
 
 $(TARGET_DIR)/git-prompt-patched-debug.o: $(SRC) | $(TARGET_DIR)
-	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-patched-debug.o: $(SRC_GRAPH) | $(TARGET_DIR)
-	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-cache-patched-debug.o: $(SRC_CACHE) | $(TARGET_DIR)
 	gcc $(CFLAGS_PATCHED_DEBUG) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_PATCHED_DEBUG): $(OBJ_PATCHED_DEBUG) $(GIT_PATCHED_LIB) $(GIT_PATCHED_XDIFF) $(GIT_PATCHED_REFTABLE)
@@ -345,22 +326,10 @@ analyze:
 $(TARGET_DIR)/git-prompt-asan.o: $(SRC) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
 
-$(TARGET_DIR)/graph-distance-asan.o: $(SRC_GRAPH) | $(TARGET_DIR)
-	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-cache-asan.o: $(SRC_CACHE) | $(TARGET_DIR)
-	$(CC) $(CFLAGS_ASAN) $(GIT_CFLAGS) -c -o $@ $<
-
 $(EXECUTABLE_ASAN): $(OBJ_ASAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)
 	$(CC) $(LDFLAGS_ASAN) -o $@ $(OBJ_ASAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE) $(LIBS)
 
 $(TARGET_DIR)/git-prompt-ubsan.o: $(SRC) | $(TARGET_DIR)
-	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-ubsan.o: $(SRC_GRAPH) | $(TARGET_DIR)
-	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
-
-$(TARGET_DIR)/graph-distance-cache-ubsan.o: $(SRC_CACHE) | $(TARGET_DIR)
 	$(CC) $(CFLAGS_UBSAN) $(GIT_CFLAGS) -c -o $@ $<
 
 $(EXECUTABLE_UBSAN): $(OBJ_UBSAN) $(GIT_RAW_LIB) $(GIT_RAW_XDIFF) $(GIT_RAW_REFTABLE)

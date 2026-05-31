@@ -26,10 +26,8 @@
 #include "wt-status.h"
 #include "dir.h"
 #include "oidset.h"
-#include "oidmap.h"
 #include "remote.h"
 #include "hex.h"
-#include "graph-distance.h"
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -75,8 +73,7 @@
  * - get_git_state()              O(1)*     - File existence checks (*O(n) if checking conflicts)
  * - check_git_state_file()       O(1)*     - File access() syscall (*O(n) if checking conflicts)
  * - get_misc_indicators()        O(1)      - Flag checks and ref existence
- * - get_tracking_indicators()    O(commits)- Graph traversal (limited by max_traversal)
- * - bfs_find_distance()          O(commits)- BFS limited by max_traversal, with internal caching
+ * - get_tracking_indicators()    O(commits)- merge-base (fast with early-exit) + small ahead walk
  *
  * UNSAFE FOR LARGE REPO MODE (expensive, currently skipped):
  * ----------------------------------------------------------
@@ -127,8 +124,7 @@ static int max_traversal = MAX_TRAVERSAL_DEFAULT;
 
 static const char *const prompt_usage[] = {
   "git prompt [--help] [--no-color] [--debug] [--large-repo-size=<bytes>] "
-  "[--max-traversal=<commits>] [--local]",
-  "git prompt distance --from=<commit> --to=<commit> [--max-traversal=<commits>] [--debug]", NULL};
+  "[--max-traversal=<commits>] [--local]", NULL};
 
 static const char prompt_help[] =
   "git prompt - Display colorful git repository status for shell prompts\n"
@@ -150,19 +146,16 @@ static const char prompt_help[] =
   "\n"
   "UPSTREAM TRACKING (shown in parentheses for branches with configured upstream):\n"
   "  (↑N)     - N commits ahead of upstream (blue - ready to push)\n"
-  "  (↓N)     - N commits behind upstream (yellow - need to pull)\n"
-  "  (↑N↓M)   - N commits ahead, M commits behind (diverged, red)\n"
-  "  (↕)      - Too far diverged (>max-traversal commits, red)\n"
+  "  (↓Xt)    - Behind upstream by time t (yellow - need to pull)\n"
+  "  (↑N ↓Xt) - N commits ahead, Xt behind (diverged, red)\n"
   "  (nothing shown when in sync with upstream)\n"
-  "\n"
-  "OTHER INDICATORS:\n"
-  "  ○        - No upstream configured (magenta)\n"
   "\n"
   "DISTANCE FROM MAIN (shown for feature branches):\n"
   "  ↑N       - N commits ahead of origin/main or origin/master (blue)\n"
-  "  ↓N       - N commits behind origin/main or origin/master (yellow)\n"
-  "  ↑N↓M     - N commits ahead, M commits behind\n"
-  "  ↕        - Too far diverged from main (>max-traversal commits, red)\n"
+  "  ↓Xt      - Behind origin/main by time t (yellow)\n"
+  "  ↑N ↓Xt   - N commits ahead, Xt behind\n"
+  "\n"
+  "  Time units: s (seconds), m (minutes), h (hours), d (days), w (weeks), mo (months)\n"
   "\n"
   "WORKTREE INDICATORS:\n"
   "  🌳       - Linked worktree (full checkout)\n"
@@ -173,51 +166,22 @@ static const char prompt_help[] =
   "\n"
   "EXAMPLES:\n"
   "  [main]                - On main, in sync with upstream, clean\n"
-  "  [feature] ○           - On feature, no upstream, clean\n"
-  "  [main] (↑2)           - On main, 2 commits ahead of upstream, clean\n"
-  "  [feature] ↑5↓3        - On feature, 5 ahead/3 behind main, synced with upstream\n"
-  "  [feature] ↑10(↑2)     - Feature: 10 ahead of main, 2 unpushed to upstream\n"
+  "  [main] (↑2)           - On main, 2 commits ahead of upstream\n"
+  "  [feature] ↑5 ↓3d      - 5 commits ahead, 3 days behind main\n"
+  "  [feature] ↑10(↑2)     - 10 ahead of main, 2 unpushed to upstream\n"
   "  [main] ⚡ [merge:conflict]  - Detached HEAD, merge with conflicts\n"
   "  [feature] 💾          - On feature, has stashed changes\n"
   "\n"
   "PERFORMANCE:\n"
   "  For large repositories (>5MB index), status checks are skipped for speed.\n"
-  "  Distance calculation is limited to 1000 commits by default (configurable with "
-  "--max-traversal).\n"
-  "  Results are cached in .git/distance-cache/ when BFS visits >=10 commits.\n"
-  "  Cache maintains up to 100 files (LRU eviction), one file per commit pair.\n"
-  "\n"
-  "  NOTE: Ahead/behind counts use shortest path in graph, not git's default calculation.\n"
-  "  This measures minimum commits between branches, which may differ from git commands.\n"
+  "  Uses git's merge-base with early-exit optimization for fast ahead/behind.\n"
+  "  Ahead count limited by --max-traversal (default 1000).\n"
+  "  Behind shown as time delta (free from commit timestamps).\n"
   "\n"
   "SHELL INTEGRATION:\n"
   "  Bash:  PS1='$(git prompt)\\$ '\n"
   "  Zsh:   setopt PROMPT_SUBST; PROMPT='$(git prompt)%% '\n"
-  "  Fish:  function fish_prompt; git prompt; end\n"
-  "\n"
-  "DISTANCE SUBCOMMAND:\n"
-  "  git prompt distance --from=<commit> --to=<commit>\n"
-  "\n"
-  "  Compute graph distance between two commits. Useful for scripts and tools.\n"
-  "  Output format: \"ahead,behind\" (e.g., \"12,3\" or \"-1,-1\" if diverged)\n"
-  "\n"
-  "  Examples:\n"
-  "    git prompt distance --from=HEAD --to=origin/main\n"
-  "    git prompt distance --from=feature --to=main\n"
-  "\n"
-  "MERGE-BASE SUBCOMMAND:\n"
-  "  git prompt merge-base --from=<commit> --to=<commit>\n"
-  "\n"
-  "  Fast merge-base using two-phase BFS + timestamp-bounded LCA search.\n"
-  "  Outputs the common ancestor commit hash.\n"
-  "\n"
-  "  Exact in typical repositories. May return a suboptimal ancestor if\n"
-  "  committer timestamps are severely out of order (>1 hour skew).\n"
-  "  Returns error if no common ancestor is found within --max-traversal.\n"
-  "\n"
-  "  Examples:\n"
-  "    git prompt merge-base --from=HEAD --to=origin/main\n"
-  "    git prompt merge-base --from=feature --to=main\n";
+  "  Fish:  function fish_prompt; git prompt; end\n";
 
 static void show_help(void)
 {
@@ -829,17 +793,156 @@ static int get_branch_name_and_color(struct strbuf *branch, const char **color,
 }
 
 /*
- * Section 2: Collect tracking indicators using BFS.
- * Uses bidirectional BFS to determine ahead/behind/diverged status.
+ * Format a time delta as a compact human-readable string.
+ * Uses the largest appropriate unit: s, m, h, d, w, mo.
+ */
+static void format_time_delta(struct strbuf *sb, timestamp_t seconds)
+{
+  if (seconds < 60)
+    strbuf_addf(sb, "%"PRItime"s", seconds);
+  else if (seconds < 3600)
+    strbuf_addf(sb, "%"PRItime"m", seconds / 60);
+  else if (seconds < 86400)
+    strbuf_addf(sb, "%"PRItime"h", seconds / 3600);
+  else if (seconds < 604800)
+    strbuf_addf(sb, "%"PRItime"d", seconds / 86400);
+  else if (seconds < 2592000)
+    strbuf_addf(sb, "%"PRItime"w", seconds / 604800);
+  else
+    strbuf_addf(sb, "%"PRItime"mo", seconds / 2592000);
+}
+
+/*
+ * Count commits reachable from 'tip' but not from 'base' by walking parents.
+ * Returns -1 if count exceeds max_count (too many to count quickly).
+ */
+static int count_commits_ahead(const struct object_id *tip,
+                               const struct object_id *base,
+                               int max_count)
+{
+  struct commit *c;
+  struct commit_list *work = NULL;
+  struct oidset seen = OIDSET_INIT;
+  int count = 0;
+
+  if (oideq(tip, base))
+    return 0;
+
+  c = lookup_commit(the_repository, tip);
+  if (!c || repo_parse_commit(the_repository, c))
+    return -1;
+
+  commit_list_insert(c, &work);
+  oidset_insert(&seen, tip);
+
+  while (work) {
+    struct commit *curr = pop_commit(&work);
+    struct commit_list *parent;
+
+    if (oideq(&curr->object.oid, base))
+      continue;
+
+    count++;
+    if (count > max_count) {
+      free_commit_list(work);
+      oidset_clear(&seen);
+      return -1;
+    }
+
+    for (parent = curr->parents; parent; parent = parent->next) {
+      if (oidset_insert(&seen, &parent->item->object.oid))
+        continue;
+      if (repo_parse_commit(the_repository, parent->item))
+        continue;
+      commit_list_insert(parent->item, &work);
+    }
+  }
+
+  oidset_clear(&seen);
+  return count;
+}
+
+/*
+ * Compute relationship between two refs using merge-base.
+ *
+ * Uses git's own merge-base (with paint_down_to_common early-exit optimization)
+ * then compares OIDs:
+ *   - merge-base == head && merge-base == ref: in sync
+ *   - merge-base == head: behind only
+ *   - merge-base == ref:  ahead only
+ *   - otherwise:          diverged (ahead + behind)
+ *
+ * Ahead count: exact commit count (small, fast to walk).
+ * Behind: time delta between merge-base and ref timestamps (free from parsed commits).
+ */
+struct ref_relationship {
+  int ahead;                /* Commits ahead (-1 if too many) */
+  timestamp_t behind_seconds; /* Seconds behind (0 if not behind) */
+  int is_behind;            /* 1 if behind at all */
+};
+
+static struct ref_relationship compute_relationship(const struct object_id *head_oid,
+                                                    const struct object_id *ref_oid)
+{
+  struct ref_relationship rel = { 0, 0, 0 };
+  struct commit *head_commit, *ref_commit;
+  struct commit_list *bases = NULL;
+  struct commit *base;
+
+  if (oideq(head_oid, ref_oid))
+    return rel;
+
+  head_commit = lookup_commit(the_repository, head_oid);
+  ref_commit = lookup_commit(the_repository, ref_oid);
+  if (!head_commit || !ref_commit)
+    return rel;
+  if (repo_parse_commit(the_repository, head_commit) ||
+      repo_parse_commit(the_repository, ref_commit))
+    return rel;
+
+  if (repo_get_merge_bases_many_dirty(the_repository, head_commit, 1, &ref_commit,
+                                      0, &bases) < 0 ||
+      !bases) {
+    free_commit_list(bases);
+    rel.ahead = -1;
+    rel.is_behind = 1;
+    return rel;
+  }
+
+  base = bases->item;
+
+  if (!oideq(&base->object.oid, head_oid))
+    rel.ahead = count_commits_ahead(head_oid, &base->object.oid, max_traversal);
+
+  if (!oideq(&base->object.oid, ref_oid)) {
+    rel.is_behind = 1;
+    if (repo_parse_commit(the_repository, base) == 0)
+      rel.behind_seconds = ref_commit->date - base->date;
+    if (rel.behind_seconds < 0)
+      rel.behind_seconds = 0;
+  }
+
+  if (debug_mode) {
+    fprintf(stderr, "[DEBUG] merge-base: %s, ahead=%d, behind_seconds=%"PRItime"\n",
+            oid_to_hex(&base->object.oid), rel.ahead, rel.behind_seconds);
+  }
+
+  free_commit_list(bases);
+  return rel;
+}
+
+/*
+ * Section 2: Collect tracking indicators using merge-base.
  *
  * Two-phase approach:
- * Phase 1: Check distance from origin/master (main codebase)
- * Phase 2: Check distance from upstream tracking branch (what you pushed)
+ * Phase 1: Check relationship with origin/master (main codebase)
+ * Phase 2: Check relationship with upstream tracking branch (what you pushed)
  *
- * Performance: O(commits) where commits ≤ 2 * max_traversal (default 2000)
- *              BFS results are automatically cached internally by graph-distance module
- *              Fast path: cache hit is O(1) (file read + parse)
- *              Slow path: BFS traversal limited by max_traversal
+ * Ahead shown as commit count, behind shown as time duration.
+ *
+ * Performance: merge-base is fast with paint_down_to_common optimization (~10-60ms).
+ *              Ahead count walks only the small local branch (instant for typical branches).
+ *              Behind uses timestamp delta (free, already parsed).
  * Safe for large repo mode: Yes (graph operations, independent of worktree/index)
  */
 static void get_tracking_indicators(struct strbuf *indicators, int detached,
@@ -991,134 +1094,73 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
   }
 
   /*
-	 * Compute distances using BFS (automatically cached internally).
+	 * Compute relationships using merge-base + OID comparison.
 	 */
-  int main_ahead = -1, main_behind = -1;
-  int upstream_ahead = -1, upstream_behind = -1;
+  struct ref_relationship main_rel = { 0, 0, 0 };
+  struct ref_relationship upstream_rel = { 0, 0, 0 };
 
-  /* Compute main distance */
   if (has_main_oid) {
-    if (debug_mode) {
-      fprintf(stderr, "[DEBUG] BFS: HEAD = %s\n", oid_to_hex(&ctx->oid));
-      fprintf(stderr, "[DEBUG] BFS: %s = %s\n", main_branch, oid_to_hex(&main_oid));
-    }
-    struct bfs_distance_result main_result =
-      bfs_find_distance(&ctx->oid, &main_oid, max_traversal, debug_mode);
-    main_ahead = main_result.ahead;
-    main_behind = main_result.behind;
-    if (debug_mode) {
-      fprintf(stderr, "[DEBUG] main distance: ahead=%d, behind=%d, cost=%d\n", main_ahead,
-              main_behind, main_result.commits_visited);
-    }
+    main_rel = compute_relationship(&ctx->oid, &main_oid);
   }
 
-  /* Compute upstream distance (if different from main) */
   if (has_upstream && !upstream_is_main) {
-    if (debug_mode) {
-      fprintf(stderr, "[DEBUG] BFS: upstream = %s = %s\n", upstream, oid_to_hex(&upstream_oid));
-    }
-    struct bfs_distance_result upstream_result =
-      bfs_find_distance(&ctx->oid, &upstream_oid, max_traversal, debug_mode);
-    upstream_ahead = upstream_result.ahead;
-    upstream_behind = upstream_result.behind;
-    if (debug_mode) {
-      fprintf(stderr,
-              "[DEBUG] upstream distance: ahead=%d, behind=%d, "
-              "cost=%d\n",
-              upstream_ahead, upstream_behind, upstream_result.commits_visited);
-    }
+    upstream_rel = compute_relationship(&ctx->oid, &upstream_oid);
   }
 
   DEBUG_TIMER_END(distance, "Distance check");
 
   /*
 	 * Display strategy: Show two separate indicators
-	 * 1. Relationship to origin/master (main codebase)
-	 * 2. Relationship to upstream tracking branch
+	 * 1. Relationship to origin/master (main codebase) — ahead as count, behind as time
+	 * 2. Relationship to upstream tracking branch — ahead as count, behind as time
 	 */
 
+  /* Helper macro to emit ahead/behind for a relationship */
+#define EMIT_RELATIONSHIP(rel, use_parens) do { \
+    if ((rel).ahead || (rel).is_behind) { \
+      struct strbuf _tmp = STRBUF_INIT; \
+      const char *_color; \
+      if ((rel).ahead && (rel).is_behind) \
+        _color = COLOR_DIVERGED; \
+      else if ((rel).ahead) \
+        _color = COLOR_AHEAD; \
+      else \
+        _color = COLOR_BEHIND; \
+      if (use_parens) strbuf_addch(&_tmp, '('); \
+      if ((rel).ahead > 0) \
+        strbuf_addf(&_tmp, "↑%d", (rel).ahead); \
+      else if ((rel).ahead < 0) \
+        strbuf_addstr(&_tmp, "↑?"); \
+      if ((rel).ahead && (rel).is_behind) \
+        strbuf_addch(&_tmp, ' '); \
+      if ((rel).is_behind) { \
+        strbuf_addstr(&_tmp, "↓"); \
+        if ((rel).behind_seconds > 0) \
+          format_time_delta(&_tmp, (rel).behind_seconds); \
+      } \
+      if (use_parens) strbuf_addch(&_tmp, ')'); \
+      strbuf_color_addf(indicators, _color, "%s", _tmp.buf); \
+      strbuf_release(&_tmp); \
+    } \
+  } while(0)
+
   /* Show main distance when main_branch exists */
-  /* Skip if we already showed it as upstream indicator AND would be duplicate */
   if (main_branch && (!has_upstream || !upstream_is_main)) {
-    if (main_ahead >= 0 && main_behind >= 0) {
-      /* Both values known - found merge-base, can show accurate distance */
-      if (main_ahead > 0 && main_behind > 0) {
-        /* Diverged: both ahead and behind - never use parentheses */
-        strbuf_color_addf(indicators, COLOR_DIVERGED, "↑%d↓%d", main_ahead, main_behind);
-      } else if (main_ahead > 0) {
-        /* Ahead of main - never use parentheses */
-        strbuf_color_addf(indicators, COLOR_AHEAD, "↑%d", main_ahead);
-      } else if (main_behind > 0) {
-        /* Behind main - never use parentheses */
-        strbuf_color_addf(indicators, COLOR_BEHIND, "↓%d", main_behind);
-      }
-      /* If both are 0, we're in sync - don't show anything */
-    } else {
-      /* Both searches exhausted - too far apart */
-      strbuf_color_addf(indicators, COLOR_DIVERGED, "↕");
-    }
+    EMIT_RELATIONSHIP(main_rel, 0);
   }
 
-  /* Show upstream == main distance with appropriate formatting */
+  /* Show upstream == main distance */
   if (has_upstream && upstream_is_main) {
-    /*
-		 * Use parentheses if main came from fallback (not from origin/HEAD symref).
-		 * When origin/HEAD symref exists and points to same as upstream, treat as
-		 * canonical main branch (no parentheses). Otherwise use parentheses to
-		 * indicate upstream tracking relationship.
-		 */
     int use_parens = !main_from_symref;
-
-    if (main_ahead >= 0 && main_behind >= 0) {
-      if (main_ahead > 0 && main_behind > 0) {
-        if (use_parens) {
-          strbuf_color_addf(indicators, COLOR_DIVERGED, "(↑%d↓%d)", main_ahead, main_behind);
-        } else {
-          strbuf_color_addf(indicators, COLOR_DIVERGED, "↑%d↓%d", main_ahead, main_behind);
-        }
-      } else if (main_ahead > 0) {
-        if (use_parens) {
-          strbuf_color_addf(indicators, COLOR_AHEAD, "(↑%d)", main_ahead);
-        } else {
-          strbuf_color_addf(indicators, COLOR_AHEAD, "↑%d", main_ahead);
-        }
-      } else if (main_behind > 0) {
-        if (use_parens) {
-          strbuf_color_addf(indicators, COLOR_BEHIND, "(↓%d)", main_behind);
-        } else {
-          strbuf_color_addf(indicators, COLOR_BEHIND, "↓%d", main_behind);
-        }
-      }
-    } else {
-      if (use_parens) {
-        strbuf_color_addf(indicators, COLOR_DIVERGED, "(↕)");
-      } else {
-        strbuf_color_addf(indicators, COLOR_DIVERGED, "↕");
-      }
-    }
+    EMIT_RELATIONSHIP(main_rel, use_parens);
   }
 
-  /* Show upstream tracking distance */
-  /* Skip if upstream == main_branch (we already showed main distance above) */
+  /* Show upstream tracking distance (if different from main) */
   if (has_upstream && !upstream_is_main) {
-    if (upstream_ahead >= 0 && upstream_behind >= 0) {
-      /* Both values known - found merge-base, can show accurate distance */
-      if (upstream_ahead > 0 && upstream_behind > 0) {
-        /* Diverged from upstream - both ahead and behind */
-        strbuf_color_addf(indicators, COLOR_DIVERGED, "(↑%d↓%d)", upstream_ahead, upstream_behind);
-      } else if (upstream_ahead > 0) {
-        /* Ahead of upstream - need to push */
-        strbuf_color_addf(indicators, COLOR_AHEAD, "(↑%d)", upstream_ahead);
-      } else if (upstream_behind > 0) {
-        /* Behind upstream - need to pull */
-        strbuf_color_addf(indicators, COLOR_BEHIND, "(↓%d)", upstream_behind);
-      }
-      /* If both are 0, we're in sync - don't show anything */
-    } else {
-      /* Both searches exhausted - too far apart */
-      strbuf_color_addf(indicators, COLOR_DIVERGED, "(↕)");
-    }
+    EMIT_RELATIONSHIP(upstream_rel, 1);
   }
+
+#undef EMIT_RELATIONSHIP
 
   /* Clean up allocated main_branch string */
   free(main_branch_allocated);
@@ -1258,23 +1300,14 @@ int main(int argc, const char **argv)
   struct timeval tv_start_total, tv_end_total;
   int no_color = 0;
   int nongit_ok = 0;
-  int merge_base_count = 1;
-  int merge_base_all = 0;
-  const char *from_commit = NULL;
-  const char *to_commit = NULL;
   const struct option options[] = {
     OPT_BOOL(0, "no-color", &no_color, "disable colored output"),
     OPT_BOOL(0, "debug", &debug_mode, "show timing information"),
     OPT_INTEGER(0, "large-repo-size", &large_repo_size,
                 "index size threshold for large repo detection (default: 5000000)"),
     OPT_INTEGER(0, "max-traversal", &max_traversal,
-                "maximum commits to traverse in distance calculation (default: 1000)"),
+                "maximum commits to traverse in ahead count (default: 1000)"),
     OPT_BOOL(0, "local", &local_mode, "skip reading global git config"),
-    OPT_STRING(0, "from", &from_commit, "commit", "start commit for distance calculation"),
-    OPT_STRING(0, "to", &to_commit, "commit", "target commit for distance calculation"),
-    OPT_INTEGER(0, "count", &merge_base_count,
-                "number of merge-bases to find (default: 1)"),
-    OPT_BOOL(0, "all", &merge_base_all, "find all merge-bases"),
     OPT_END()};
   struct strbuf branch = STRBUF_INIT;
   struct strbuf indicators = STRBUF_INIT;
@@ -1293,7 +1326,7 @@ int main(int argc, const char **argv)
   initialize_repository(the_repository);
 
   /* Setup git repository */
-  prefix = setup_git_directory_gently(&nongit_ok);
+  prefix = setup_git_directory_gently(the_repository, &nongit_ok);
 
   /* Return silently if not in a git repository */
   if (nongit_ok) {
@@ -1320,91 +1353,14 @@ int main(int argc, const char **argv)
     gettimeofday(&tv_start_total, NULL);
   }
 
-  /* Handle merge-base subcommand */
   if (argc > 0 && !strcmp(argv[0], "merge-base")) {
-    struct object_id from_oid, to_oid;
-
-    if (!from_commit || !to_commit) {
-      fprintf(stderr, "error: merge-base subcommand requires --from and --to arguments\n");
-      usage_with_options(prompt_usage, options);
-    }
-
-    if (repo_get_oid(the_repository, from_commit, &from_oid)) {
-      fprintf(stderr, "error: cannot resolve --from commit: %s\n", from_commit);
-      return 1;
-    }
-
-    if (repo_get_oid(the_repository, to_commit, &to_oid)) {
-      fprintf(stderr, "error: cannot resolve --to commit: %s\n", to_commit);
-      return 1;
-    }
-
-    if (merge_base_all)
-      merge_base_count = 1000;
-    else if (merge_base_count < 1)
-      merge_base_count = 1;
-
-    struct oidset found = OIDSET_INIT;
-    int found_any = 0;
-
-    for (int i = 0; i < merge_base_count; i++) {
-      struct bfs_distance_result result =
-        bfs_find_merge_base(&from_oid, &to_oid, max_traversal, debug_mode,
-                            i > 0 ? &found : NULL);
-
-      if (result.ahead < 0 || result.behind < 0)
-        break;
-
-      if (oidset_contains(&found, &result.ancestor))
-        break;
-
-      printf("%s\n", oid_to_hex(&result.ancestor));
-      oidset_insert(&found, &result.ancestor);
-      found_any = 1;
-    }
-
-    oidset_clear(&found);
-
-    if (!found_any) {
-      fprintf(stderr, "error: no common ancestor found within %d commits\n", max_traversal);
-      return 1;
-    }
-    return 0;
+    fprintf(stderr, "deprecated: use 'git merge-base <commit> <commit>' instead\n");
+    return 1;
   }
 
-  /* Handle distance subcommand */
   if (argc > 0 && !strcmp(argv[0], "distance")) {
-    struct object_id from_oid, to_oid;
-
-    /* Validate required arguments */
-    if (!from_commit || !to_commit) {
-      fprintf(stderr, "error: distance subcommand requires --from and --to arguments\n");
-      usage_with_options(prompt_usage, options);
-    }
-
-    /* Resolve commit OIDs */
-    if (repo_get_oid(the_repository, from_commit, &from_oid)) {
-      fprintf(stderr, "error: cannot resolve --from commit: %s\n", from_commit);
-      return 1;
-    }
-
-    if (repo_get_oid(the_repository, to_commit, &to_oid)) {
-      fprintf(stderr, "error: cannot resolve --to commit: %s\n", to_commit);
-      return 1;
-    }
-
-    /* Calculate distance */
-    struct bfs_distance_result result =
-      bfs_find_distance(&from_oid, &to_oid, max_traversal, debug_mode);
-
-    /* Output in machine-readable format: "ahead,behind" or "ahead,behind:ancestor" if diverged */
-    if (result.ahead > 0 && result.behind > 0) {
-      printf("%d,%d:%s\n", result.ahead, result.behind, oid_to_hex(&result.ancestor));
-    } else {
-      printf("%d,%d\n", result.ahead, result.behind);
-    }
-
-    return 0;
+    fprintf(stderr, "deprecated: use 'git rev-list --count --left-right <commit>...<commit>' instead\n");
+    return 1;
   }
 
   if (argc > 0) {

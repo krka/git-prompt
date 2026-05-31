@@ -58,8 +58,8 @@ tests:
   - git config branch.master.merge refs/heads/master
   - git update-ref refs/remotes/origin/master HEAD
   - git reset --hard HEAD~1
-  expected: '{GREEN}[master]{} {YELLOW}(↓1){}'
-  expected_large: '{GRAY}[master]{} {YELLOW}(↓1){}'
+  expected: '{GREEN}[master]{} {YELLOW}(↓3s){}'
+  expected_large: '{GRAY}[master]{} {YELLOW}(↓3s){}'
 - description: Master tracking origin/master
   name: Master tracking origin/master (no duplicate indicators)
   group: upstream
@@ -80,8 +80,8 @@ tests:
   - git update-ref refs/remotes/origin/master HEAD
   - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
   - git reset --hard HEAD~1
-  expected: '{GREEN}[master]{} {YELLOW}↓1{}'
-  expected_large: '{GRAY}[master]{} {YELLOW}↓1{}'
+  expected: '{GREEN}[master]{} {YELLOW}↓3s{}'
+  expected_large: '{GRAY}[master]{} {YELLOW}↓3s{}'
 - description: Branch diverged from upstream
   name: Diverged from upstream
   group: upstream
@@ -107,8 +107,8 @@ tests:
   - echo "local change" > file2.txt
   - git add file2.txt
   - git commit -m "Local change"
-  expected: '{GREEN}[master]{} {RED}(↑1↓1){}'
-  expected_large: '{GRAY}[master]{} {RED}(↑1↓1){}'
+  expected: '{GREEN}[master]{} {RED}(↑1 ↓8s){}'
+  expected_large: '{GRAY}[master]{} {RED}(↑1 ↓8s){}'
 - description: Feature branch ahead of origin/main
   name: Feature branch ahead of origin/main
   group: upstream
@@ -184,8 +184,8 @@ tests:
   - git update-ref refs/remotes/origin/main HEAD
   - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   - git checkout feature
-  expected: '{GREEN}[feature]{} {YELLOW}↓2{}'
-  expected_large: '{GRAY}[feature]{} {YELLOW}↓2{}'
+  expected: '{GREEN}[feature]{} {YELLOW}↓7s{}'
+  expected_large: '{GRAY}[feature]{} {YELLOW}↓7s{}'
 - description: Branch too far diverged from upstream
   name: Too far diverged from upstream
   group: upstream
@@ -208,8 +208,8 @@ tests:
   - git checkout master
   - command: echo y >> file2.txt && git add file2.txt && git commit -m 'Local commit'
     repeat: 15
-  expected: '{GREEN}[master]{} {RED}(↕){}'
-  expected_large: '{GRAY}[master]{} {RED}(↕){}'
+  expected: '{GREEN}[master]{} {RED}(↑? ↓20s){}'
+  expected_large: '{GRAY}[master]{} {RED}(↑? ↓20s){}'
 - description: Branch far behind origin/main
   name: Far behind origin/main (>10 commits)
   group: upstream
@@ -232,8 +232,8 @@ tests:
   - git update-ref refs/remotes/origin/main HEAD
   - git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   - git checkout feature
-  expected: '{GREEN}[feature]{} {RED}↕{}'
-  expected_large: '{GRAY}[feature]{} {RED}↕{}'
+  expected: '{GREEN}[feature]{} {YELLOW}↓16s{}'
+  expected_large: '{GRAY}[feature]{} {YELLOW}↓16s{}'
 - description: Feature branch ahead and diverged
   name: 'Feature branch: ahead of origin/feature, diverged from origin/master'
   group: upstream
@@ -282,8 +282,8 @@ tests:
   - echo "Z" >> feature.txt
   - git add feature.txt
   - git commit -m "Commit Z"
-  expected: '{GREEN}[feature]{} {RED}↑4↓3{}{BLUE}(↑1){}'
-  expected_large: '{GRAY}[feature]{} {RED}↑4↓3{}{BLUE}(↑1){}'
+  expected: '{GREEN}[feature]{} {RED}↑4 ↓9s{}{BLUE}(↑1){}'
+  expected_large: '{GRAY}[feature]{} {RED}↑4 ↓9s{}{BLUE}(↑1){}'
 - description: Fork workflow - tracking fork remote but comparing to origin/main
   name: 'Fork workflow: branch tracks fork remote, compares to origin/main'
   group: upstream

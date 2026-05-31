@@ -186,5 +186,5 @@ tests:
   - git commit -m "Version 1"
   - git tag v1.0
   - git checkout v1.0
-  expected: '{GREEN}[5695746]{} ⚡'
-  expected_large: '{GRAY}[5695746]{} ⚡'
+  expected: '{GREEN}[0b37fcd]{} ⚡'
+  expected_large: '{GRAY}[0b37fcd]{} ⚡'

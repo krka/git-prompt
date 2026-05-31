@@ -44,5 +44,5 @@ tests:
   - git bisect start
   - git bisect bad
   - git bisect good HEAD~4
-  expected: '{GREEN}[963f54c]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
-  expected_large: '{GRAY}[963f54c]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
+  expected: '{GREEN}[5d99ae9]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'
+  expected_large: '{GRAY}[5d99ae9]{} ⚡[{YELLOW}bisect{} ({GREEN}1{}/{RED}1{})]'

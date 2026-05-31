@@ -1011,6 +1011,7 @@ def run_test_suite(test_file, git_prompt_path, verbose=False, replace_expected=F
             # Reset to fresh directory if requested
             # Clean entire tmpdir (including sibling dirs like worktree-dir)
             if reset:
+                _git_timestamp = 1577836800  # Reset timestamps per test
                 for entry in os.listdir(tmpdir):
                     entry_path = os.path.join(tmpdir, entry)
                     if os.path.isdir(entry_path):

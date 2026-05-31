@@ -58,7 +58,7 @@ tests:
   - git add file.txt
   - git commit -m "Change 1"
   - GIT_SEQUENCE_EDITOR="sed -i 's/^pick/edit/'" git rebase -i HEAD~1
-  expected: '{YELLOW}[7630c0e]{} ⚡{CYAN}[rebase:continue 1/1]{}'
+  expected: '{YELLOW}[deab948]{} ⚡{CYAN}[rebase:continue 1/1]{}'
 - description: Cherry-pick with conflict
   name: Cherry-pick with conflict
   group: in-progress
@@ -127,7 +127,7 @@ tests:
   - git commit -m "Master commit"
   - git checkout feature
   - git rebase master || true
-  expected: '{RED}[2044a00]{} ⚡{RED}[rebase:conflict 1/2]{}'
+  expected: '{RED}[2fcfb6b]{} ⚡{RED}[rebase:conflict 1/2]{}'
 - description: Multi-commit rebase with progress (conflict mid-way)
   name: Rebase progress with conflict
   group: in-progress
@@ -152,7 +152,7 @@ tests:
   - command: echo "feature$i" >> file.txt && git commit -am "feature$i"
     repeat: 5
   - git rebase master || true
-  expected: '{RED}[2fc302e]{} ⚡{RED}[rebase:conflict 6/11]{}'
+  expected: '{RED}[e89a60e]{} ⚡{RED}[rebase:conflict 6/11]{}'
 - description: Multi-commit rebase with progress (after resolving conflict)
   name: Rebase progress after resolving
   group: in-progress
@@ -178,7 +178,7 @@ tests:
   - git rebase master || true
   - echo "resolved" > master.txt
   - git add master.txt
-  expected: '{YELLOW}[28ef62c]{} ⚡{CYAN}[rebase:continue 6/11]{}'
+  expected: '{YELLOW}[e89a60e]{} ⚡{CYAN}[rebase:continue 6/11]{}'
 - description: Git revert with conflicts
   name: Revert with conflicts
   group: in-progress
