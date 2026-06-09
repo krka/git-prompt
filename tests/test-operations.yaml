@@ -258,6 +258,57 @@ tests:
   cwd: ../sparse-wt
   expected: '{GREEN}[sparse-feature]{} 🪾'
   expected_large: '{GRAY}[sparse-feature]{} 🪾'
+- description: Sparse worktree with sparse index (index.sparse=true) shows correct
+    color for clean state. The sparse index has directory entries for paths outside
+    the cone - these must not be misdetected as unstaged changes.
+  name: Sparse index clean
+  group: worktree
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - mkdir -p src/a src/b src/c docs/x docs/y
+  - echo "a1" > src/a/f1.txt
+  - echo "a2" > src/a/f2.txt
+  - echo "b1" > src/b/f1.txt
+  - echo "c1" > src/c/f1.txt
+  - echo "d1" > docs/x/f1.txt
+  - echo "d2" > docs/y/f1.txt
+  - git add .
+  - git commit -m "Initial commit with multiple dirs"
+  - git checkout -b sparse-feature
+  - git checkout master
+  - git worktree add ../sparse-idx-wt sparse-feature
+  - cd ../sparse-idx-wt && git sparse-checkout init --cone && git sparse-checkout
+    set src/a && git config index.sparse true && git status > /dev/null
+  cwd: ../sparse-idx-wt
+  expected: '{GREEN}[sparse-feature]{} 🪾'
+  expected_large: '{GRAY}[sparse-feature]{} 🪾'
+- description: Sparse index shows RED for modified file in sparse cone.
+  name: Sparse index modified file
+  group: worktree
+  steps:
+  - cd ../sparse-idx-wt && echo "modified" > src/a/f1.txt
+  cwd: ../sparse-idx-wt
+  expected: '{RED}[sparse-feature]{} 🪾'
+  expected_large: '{GRAY}[sparse-feature]{} 🪾'
+- description: Sparse index shows YELLOW for staged changes.
+  name: Sparse index staged file
+  group: worktree
+  steps:
+  - cd ../sparse-idx-wt && git add src/a/f1.txt
+  cwd: ../sparse-idx-wt
+  expected: '{YELLOW}[sparse-feature]{} 🪾'
+  expected_large: '{GRAY}[sparse-feature]{} 🪾'
+- description: Sparse index shows GREEN after committing.
+  name: Sparse index after commit
+  group: worktree
+  steps:
+  - cd ../sparse-idx-wt && git commit -m "modify file in sparse cone"
+  cwd: ../sparse-idx-wt
+  expected: '{GREEN}[sparse-feature]{} 🪾'
+  expected_large: '{GRAY}[sparse-feature]{} 🪾'
 - description: Git am (apply mailbox) clean apply
   name: Git am clean apply
   group: am

@@ -3,6 +3,8 @@
 # This tool builds against git as a submodule. The build process is optimized
 # to minimize rebuilds - git's object files are only rebuilt when necessary.
 
+.DEFAULT_GOAL := all
+
 # Project settings
 PROJECT = git-prompt
 SUBMODULE_DIR = submodules/git

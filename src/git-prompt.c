@@ -19,6 +19,7 @@
 #include "revision.h"
 #include "run-command.h"
 #include "setup.h"
+#include "repo-settings.h"
 #include "strbuf.h"
 #include "parse-options.h"
 #include "read-cache.h"
@@ -228,11 +229,26 @@ static int is_large_repo(void)
   struct stat st;
   struct strbuf index_file = STRBUF_INIT;
 
+  /* Check the worktree's own index */
   strbuf_addf(&index_file, "%s/index", repo_get_git_dir(the_repository));
 
   if (!stat(index_file.buf, &st) && st.st_size > large_repo_size) {
     strbuf_release(&index_file);
     return 1;
+  }
+
+  /*
+   * For linked worktrees (especially sparse checkouts), the worktree's
+   * index may be small while the main repo is huge. Check the main
+   * repo's index too — it reflects the true repository scale.
+   */
+  if (the_repository->different_commondir) {
+    strbuf_reset(&index_file);
+    strbuf_addf(&index_file, "%s/index", repo_get_common_dir(the_repository));
+    if (!stat(index_file.buf, &st) && st.st_size > large_repo_size) {
+      strbuf_release(&index_file);
+      return 1;
+    }
   }
 
   strbuf_release(&index_file);
@@ -396,6 +412,11 @@ static int has_worktree_changes(struct repository *r)
 
     /* Skip submodule entries - they're handled specially by git status */
     if (S_ISGITLINK(ce->ce_mode)) {
+      continue;
+    }
+
+    /* Skip sparse directory entries and skip-worktree entries — no file on disk to stat */
+    if (S_ISSPARSEDIR(ce->ce_mode) || ce_skip_worktree(ce)) {
       continue;
     }
 
@@ -1381,6 +1402,18 @@ int main(int argc, const char **argv)
   ctx.large_repo = is_large_repo();
   ctx.refs = get_main_ref_store(the_repository);
   ctx.index_loaded = 0;
+
+  /*
+   * Tell git we can handle sparse index entries without expansion.
+   * All our index operations are sparse-aware:
+   * - refresh_index() skips S_ISSPARSEDIR entries
+   * - cache_tree_update() uses sparse dir OIDs as leaves
+   * - has_unmerged_files() iteration is fine (sparse dirs are stage 0)
+   * - fill_directory() walks the filesystem (only sparse cone exists)
+   * Without this, repo_read_index() expands sparse → full, which is slow.
+   */
+  prepare_repo_settings(the_repository);
+  the_repository->settings.command_requires_full_index = 0;
 
   /*
 	 * Load the index once at the start for all operations.
