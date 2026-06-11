@@ -900,9 +900,9 @@ static int count_commits_ahead(const struct object_id *tip,
  * Behind: time delta between merge-base and ref timestamps (free from parsed commits).
  */
 struct ref_relationship {
-  int ahead;                /* Commits ahead, -1 if too many, -2 if disjoint */
-  timestamp_t behind_seconds; /* Seconds behind (0 if not behind) */
-  int is_behind;            /* 1 if behind at all */
+  int ahead;                /* Commits ahead, AHEAD_OVERFLOW if too many, AHEAD_DISJOINT if no ancestor */
+  int behind;               /* Commits behind, AHEAD_OVERFLOW if too many */
+  timestamp_t behind_seconds; /* Seconds behind (fallback when count overflows, 0 if unavailable) */
 };
 
 /*
@@ -1005,16 +1005,17 @@ static struct ref_relationship compute_relationship(const struct object_id *head
     rel.ahead = count_commits_ahead(head_oid, &base->object.oid, max_traversal);
 
   if (!oideq(&base->object.oid, ref_oid)) {
-    rel.is_behind = 1;
-    if (repo_parse_commit(the_repository, base) == 0)
-      rel.behind_seconds = ref_commit->date - base->date;
-    if (rel.behind_seconds < 0)
-      rel.behind_seconds = 0;
+    rel.behind = count_commits_ahead(ref_oid, &base->object.oid, max_traversal);
+    if (rel.behind == AHEAD_OVERFLOW) {
+      if (repo_parse_commit(the_repository, base) == 0 &&
+          ref_commit->date > base->date)
+        rel.behind_seconds = ref_commit->date - base->date;
+    }
   }
 
   if (debug_mode) {
-    fprintf(stderr, "[DEBUG] merge-base: %s, ahead=%d, behind_seconds=%"PRItime"\n",
-            oid_to_hex(&base->object.oid), rel.ahead, rel.behind_seconds);
+    fprintf(stderr, "[DEBUG] merge-base: %s, ahead=%d, behind=%d, behind_seconds=%"PRItime"\n",
+            oid_to_hex(&base->object.oid), rel.ahead, rel.behind, rel.behind_seconds);
   }
 
   free_commit_list(bases);
@@ -1206,31 +1207,36 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	 */
 
   /* Helper macro to emit ahead/behind for a relationship */
+#define EMIT_AHEAD_BEHIND(sb, count, seconds, arrow) do { \
+    strbuf_addstr(sb, arrow); \
+    if ((count) > 0) \
+      strbuf_addf(sb, "%d", (count)); \
+    else if ((count) == AHEAD_OVERFLOW && (seconds) > 0) \
+      format_time_delta(sb, (seconds)); \
+    else if ((count) == AHEAD_OVERFLOW) \
+      strbuf_addstr(sb, "??"); \
+  } while(0)
+
 #define EMIT_RELATIONSHIP(rel, use_parens, ref_name) do { \
     if ((rel).ahead == AHEAD_DISJOINT) { \
       strbuf_color_addf(indicators, COLOR_DIVERGED, "[no common ancestor with %s]", \
                         ref_name ? ref_name : "remote"); \
-    } else if ((rel).ahead || (rel).is_behind) { \
+    } else if ((rel).ahead || (rel).behind) { \
       struct strbuf _tmp = STRBUF_INIT; \
       const char *_color; \
-      if ((rel).ahead && (rel).is_behind) \
+      if ((rel).ahead && (rel).behind) \
         _color = COLOR_DIVERGED; \
       else if ((rel).ahead) \
         _color = COLOR_AHEAD; \
       else \
         _color = COLOR_BEHIND; \
       if (use_parens) strbuf_addch(&_tmp, '('); \
-      if ((rel).ahead > 0) \
-        strbuf_addf(&_tmp, "↑%d", (rel).ahead); \
-      else if ((rel).ahead == AHEAD_OVERFLOW) \
-        strbuf_addstr(&_tmp, "↑?"); \
-      if ((rel).ahead && (rel).is_behind) \
+      if ((rel).ahead) \
+        EMIT_AHEAD_BEHIND(&_tmp, (rel).ahead, 0, "↑"); \
+      if ((rel).ahead && (rel).behind) \
         strbuf_addch(&_tmp, ' '); \
-      if ((rel).is_behind) { \
-        strbuf_addstr(&_tmp, "↓"); \
-        if ((rel).behind_seconds > 0) \
-          format_time_delta(&_tmp, (rel).behind_seconds); \
-      } \
+      if ((rel).behind) \
+        EMIT_AHEAD_BEHIND(&_tmp, (rel).behind, (rel).behind_seconds, "↓"); \
       if (use_parens) strbuf_addch(&_tmp, ')'); \
       strbuf_color_addf(indicators, _color, "%s", _tmp.buf); \
       strbuf_release(&_tmp); \
