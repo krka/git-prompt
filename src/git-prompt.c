@@ -833,9 +833,12 @@ static void format_time_delta(struct strbuf *sb, timestamp_t seconds)
     strbuf_addf(sb, "%"PRItime"mo", seconds / 2592000);
 }
 
+#define AHEAD_OVERFLOW -1
+#define AHEAD_DISJOINT -2
+
 /*
  * Count commits reachable from 'tip' but not from 'base' by walking parents.
- * Returns -1 if count exceeds max_count (too many to count quickly).
+ * Returns AHEAD_OVERFLOW if count exceeds max_count.
  */
 static int count_commits_ahead(const struct object_id *tip,
                                const struct object_id *base,
@@ -851,7 +854,7 @@ static int count_commits_ahead(const struct object_id *tip,
 
   c = lookup_commit(the_repository, tip);
   if (!c || repo_parse_commit(the_repository, c))
-    return -1;
+    return AHEAD_OVERFLOW;
 
   commit_list_insert(c, &work);
   oidset_insert(&seen, tip);
@@ -867,7 +870,7 @@ static int count_commits_ahead(const struct object_id *tip,
     if (count > max_count) {
       free_commit_list(work);
       oidset_clear(&seen);
-      return -1;
+      return AHEAD_OVERFLOW;
     }
 
     for (parent = curr->parents; parent; parent = parent->next) {
@@ -897,10 +900,67 @@ static int count_commits_ahead(const struct object_id *tip,
  * Behind: time delta between merge-base and ref timestamps (free from parsed commits).
  */
 struct ref_relationship {
-  int ahead;                /* Commits ahead (-1 if too many) */
+  int ahead;                /* Commits ahead, -1 if too many, -2 if disjoint */
   timestamp_t behind_seconds; /* Seconds behind (0 if not behind) */
   int is_behind;            /* 1 if behind at all */
 };
+
+/*
+ * Cache file for disjoint history detection.
+ * Stores pairs of OIDs that have no common ancestor, so we avoid
+ * repeating the expensive full-graph walk on every prompt.
+ *
+ * Format: one line per pair: "<head_hex> <ref_hex>\n"
+ * Location: .git/prompt-disjoint
+ */
+static void format_oid_pair(struct strbuf *sb,
+                            const struct object_id *a,
+                            const struct object_id *b)
+{
+  strbuf_addstr(sb, oid_to_hex(a));
+  strbuf_addch(sb, ' ');
+  strbuf_addstr(sb, oid_to_hex(b));
+}
+
+static int is_cached_disjoint(const struct object_id *head_oid,
+                              const struct object_id *ref_oid)
+{
+  struct strbuf path = STRBUF_INIT;
+  struct strbuf content = STRBUF_INIT;
+  struct strbuf needle = STRBUF_INIT;
+  int found = 0;
+
+  strbuf_addf(&path, "%s/prompt-disjoint", repo_get_git_dir(the_repository));
+  if (strbuf_read_file(&content, path.buf, 0) <= 0)
+    goto done;
+
+  format_oid_pair(&needle, head_oid, ref_oid);
+  found = !!strstr(content.buf, needle.buf);
+
+done:
+  strbuf_release(&path);
+  strbuf_release(&content);
+  strbuf_release(&needle);
+  return found;
+}
+
+static void cache_disjoint(const struct object_id *head_oid,
+                           const struct object_id *ref_oid)
+{
+  struct strbuf path = STRBUF_INIT;
+  struct strbuf line = STRBUF_INIT;
+  FILE *f;
+
+  strbuf_addf(&path, "%s/prompt-disjoint", repo_get_git_dir(the_repository));
+  f = fopen(path.buf, "a");
+  if (f) {
+    format_oid_pair(&line, head_oid, ref_oid);
+    fprintf(f, "%s\n", line.buf);
+    fclose(f);
+  }
+  strbuf_release(&path);
+  strbuf_release(&line);
+}
 
 static struct ref_relationship compute_relationship(const struct object_id *head_oid,
                                                     const struct object_id *ref_oid)
@@ -912,6 +972,13 @@ static struct ref_relationship compute_relationship(const struct object_id *head
 
   if (oideq(head_oid, ref_oid))
     return rel;
+
+  if (is_cached_disjoint(head_oid, ref_oid)) {
+    if (debug_mode)
+      fprintf(stderr, "[DEBUG] Disjoint histories (cached)\n");
+    rel.ahead = AHEAD_DISJOINT;
+    return rel;
+  }
 
   head_commit = lookup_commit(the_repository, head_oid);
   ref_commit = lookup_commit(the_repository, ref_oid);
@@ -925,8 +992,10 @@ static struct ref_relationship compute_relationship(const struct object_id *head
                                       0, &bases) < 0 ||
       !bases) {
     free_commit_list(bases);
-    rel.ahead = -1;
-    rel.is_behind = 1;
+    cache_disjoint(head_oid, ref_oid);
+    if (debug_mode)
+      fprintf(stderr, "[DEBUG] Disjoint histories — no common ancestor\n");
+    rel.ahead = AHEAD_DISJOINT;
     return rel;
   }
 
@@ -1137,8 +1206,11 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 	 */
 
   /* Helper macro to emit ahead/behind for a relationship */
-#define EMIT_RELATIONSHIP(rel, use_parens) do { \
-    if ((rel).ahead || (rel).is_behind) { \
+#define EMIT_RELATIONSHIP(rel, use_parens, ref_name) do { \
+    if ((rel).ahead == AHEAD_DISJOINT) { \
+      strbuf_color_addf(indicators, COLOR_DIVERGED, "[no common ancestor with %s]", \
+                        ref_name ? ref_name : "remote"); \
+    } else if ((rel).ahead || (rel).is_behind) { \
       struct strbuf _tmp = STRBUF_INIT; \
       const char *_color; \
       if ((rel).ahead && (rel).is_behind) \
@@ -1150,7 +1222,7 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
       if (use_parens) strbuf_addch(&_tmp, '('); \
       if ((rel).ahead > 0) \
         strbuf_addf(&_tmp, "↑%d", (rel).ahead); \
-      else if ((rel).ahead < 0) \
+      else if ((rel).ahead == AHEAD_OVERFLOW) \
         strbuf_addstr(&_tmp, "↑?"); \
       if ((rel).ahead && (rel).is_behind) \
         strbuf_addch(&_tmp, ' '); \
@@ -1167,18 +1239,18 @@ static void get_tracking_indicators(struct strbuf *indicators, int detached,
 
   /* Show main distance when main_branch exists */
   if (main_branch && (!has_upstream || !upstream_is_main)) {
-    EMIT_RELATIONSHIP(main_rel, 0);
+    EMIT_RELATIONSHIP(main_rel, 0, main_branch);
   }
 
   /* Show upstream == main distance */
   if (has_upstream && upstream_is_main) {
     int use_parens = !main_from_symref;
-    EMIT_RELATIONSHIP(main_rel, use_parens);
+    EMIT_RELATIONSHIP(main_rel, use_parens, main_branch);
   }
 
   /* Show upstream tracking distance (if different from main) */
   if (has_upstream && !upstream_is_main) {
-    EMIT_RELATIONSHIP(upstream_rel, 1);
+    EMIT_RELATIONSHIP(upstream_rel, 1, upstream);
   }
 
 #undef EMIT_RELATIONSHIP

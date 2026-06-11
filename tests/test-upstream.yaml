@@ -310,3 +310,25 @@ tests:
   - git config branch.feature.merge refs/heads/feature
   expected: '{GREEN}[feature]{} {BLUE}↑1{}'
   expected_large: '{GRAY}[feature]{} {BLUE}↑1{}'
+- description: Disjoint histories - origin points to unrelated repo
+  name: Disjoint histories (no common ancestor)
+  group: upstream
+  example: true
+  reset: true
+  steps:
+  - git init
+  - git config user.name "Test"
+  - git config user.email "test@example.com"
+  - echo "local" > file.txt
+  - git add file.txt
+  - git commit -m "Local commit"
+  - git remote add origin https://example.com/repo.git
+  - git checkout --orphan unrelated
+  - git rm -f file.txt
+  - echo "unrelated" > other.txt
+  - git add other.txt
+  - git commit -m "Unrelated commit"
+  - git update-ref refs/remotes/origin/master HEAD
+  - git checkout master
+  expected: '{GREEN}[master]{} {RED}[no common ancestor with origin/master]{}'
+  expected_large: '{GRAY}[master]{} {RED}[no common ancestor with origin/master]{}'
