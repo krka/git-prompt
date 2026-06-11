@@ -988,8 +988,8 @@ static struct ref_relationship compute_relationship(const struct object_id *head
       repo_parse_commit(the_repository, ref_commit))
     return rel;
 
-  if (repo_get_merge_bases_many_dirty(the_repository, head_commit, 1, &ref_commit,
-                                      0, &bases) < 0 ||
+  if (repo_get_merge_bases(the_repository, head_commit, ref_commit,
+                           &bases) < 0 ||
       !bases) {
     free_commit_list(bases);
     cache_disjoint(head_oid, ref_oid);
